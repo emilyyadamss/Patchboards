@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PatchBoards
 
 > Real-time software patch tracker powered by Homebrew, winget, and AI-driven CVE detection.
@@ -115,3 +116,6 @@ Patchboards/
 - [ ] Export patch report (PDF/CSV)
 - [ ] `apt` support on Linux
 - [ ] Auto-detect and suggest `brew upgrade` commands
+=======
+# Patchboards
+>>>>>>> dbd25da9a9548a42acbbb5467488bfb218ef495f
