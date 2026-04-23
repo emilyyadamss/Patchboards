@@ -209,6 +209,26 @@ def get_winget_packages():
     return packages
 
 
+# ── winget version lookup ────────────────────────────────────────────────────
+
+def get_winget_version(package_id):
+    """Return the latest available version string for a winget package, or None."""
+    if sys.platform != "win32":
+        return None
+    try:
+        result = subprocess.run(
+            ["winget", "show", package_id, "--accept-source-agreements"],
+            capture_output=True, text=True, timeout=30
+        )
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("version:"):
+                return stripped.split(":", 1)[1].strip()
+    except Exception as e:
+        print(f"[winget show] {e}")
+    return None
+
+
 # ── HTTP handler ─────────────────────────────────────────────────────────────
 
 class Handler(BaseHTTPRequestHandler):
@@ -236,19 +256,38 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
 
-        # GET /packages — full merged list
+        # GET /packages — full merged list (installed packages)
         if parsed.path == "/packages":
             try:
                 brew = get_homebrew_packages()
                 winget = get_winget_packages()
                 all_pkgs = brew + winget
-                # Assign stable IDs
                 for i, pkg in enumerate(all_pkgs):
                     pkg["id"] = i + 1
                 self.send_json({"packages": all_pkgs, "error": None})
             except Exception as e:
                 self.send_json({"packages": [], "error": str(e)}, 500)
+
+        # GET /winget-version?package=<id> — latest available version for a winget package
+        elif parsed.path == "/winget-version":
+            package_id = params.get("package", [None])[0]
+            if not package_id:
+                self.send_json({"error": "Missing package parameter"}, 400)
+                return
+            if sys.platform != "win32":
+                self.send_json({"error": "winget only available on Windows", "version": None})
+                return
+            version = get_winget_version(package_id)
+            if version:
+                self.send_json({
+                    "version": version,
+                    "sourceUrl": f"https://winget.run/pkg/{package_id.replace('.', '/')}",
+                    "error": None,
+                })
+            else:
+                self.send_json({"version": None, "error": f"Could not find version for {package_id}"})
 
         # GET /health — sanity check
         elif parsed.path == "/health":
