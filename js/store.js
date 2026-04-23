@@ -1,58 +1,20 @@
 // PatchBoards · store.js
-// Manages two independent data stores:
-//   myApps   — catalog IDs the user has added to their dashboard
-//   releases — latest version data per catalog ID (fetched & cached)
-//   packages — installed packages from the local server (existing functionality)
+// myApps   — catalog IDs the admin has added to the dashboard
+// releases — per-app dual-platform version cache { mac: {…}, win: {…} }
 
-const STORAGE_KEY    = 'patchboards_v3';
-const MY_APPS_KEY    = 'patchboards_myapps';
-const RELEASES_KEY   = 'patchboards_releases';
+const MY_APPS_KEY  = 'patchboards_myapps_v2';
+const RELEASES_KEY = 'patchboards_releases_v2';
 
 const Store = (() => {
-  // ── Installed packages (from server) ────────────────────────────────────────
-  let packages = [];
 
-  function loadPackages() {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) packages = JSON.parse(saved);
-    } catch { packages = []; }
-  }
-
-  function savePackages() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(packages)); } catch {}
-  }
-
-  function setAll(pkgs) { packages = pkgs; savePackages(); }
-  function getAll()     { return packages; }
-
-  function getById(id) { return packages.find(p => p.id === id); }
-
-  function updatePkg(id, changes) {
-    const idx = packages.findIndex(p => p.id === id);
-    if (idx === -1) return;
-    packages[idx] = { ...packages[idx], ...changes };
-    savePackages();
-  }
-
-  function getStats() {
-    return {
-      total:     packages.length,
-      security:  packages.filter(p => p.status === 'security').length,
-      updates:   packages.filter(p => p.status === 'update').length,
-      ok:        packages.filter(p => p.status === 'ok').length,
-      unscanned: packages.filter(p => p.status === 'unscanned').length,
-    };
-  }
-
-  // ── My Apps (dashboard catalog selections) ───────────────────────────────────
-  // Each entry: { id, addedAt, seenVersion }
+  // ── My Apps ──────────────────────────────────────────────────────────────────
+  // Each entry: { id, addedAt, seenMac, seenWin }
   let myApps = [];
 
   function loadMyApps() {
     try {
-      const saved = localStorage.getItem(MY_APPS_KEY);
-      if (saved) myApps = JSON.parse(saved);
+      const s = localStorage.getItem(MY_APPS_KEY);
+      if (s) myApps = JSON.parse(s);
     } catch { myApps = []; }
   }
 
@@ -60,39 +22,51 @@ const Store = (() => {
     try { localStorage.setItem(MY_APPS_KEY, JSON.stringify(myApps)); } catch {}
   }
 
-  function addApp(catalogId) {
-    if (myApps.find(a => a.id === catalogId)) return;
-    myApps.push({ id: catalogId, addedAt: Date.now(), seenVersion: null });
+  function addApp(id) {
+    if (myApps.find(a => a.id === id)) return;
+    myApps.push({ id, addedAt: Date.now(), seenMac: null, seenWin: null });
     saveMyApps();
   }
 
-  function removeApp(catalogId) {
-    myApps = myApps.filter(a => a.id !== catalogId);
+  function removeApp(id) {
+    myApps = myApps.filter(a => a.id !== id);
     saveMyApps();
   }
 
-  function isTracked(catalogId) {
-    return myApps.some(a => a.id === catalogId);
-  }
+  function isTracked(id) { return myApps.some(a => a.id === id); }
 
   function getMyApps() { return myApps; }
 
-  function markSeen(catalogId, version) {
-    const entry = myApps.find(a => a.id === catalogId);
-    if (entry) {
-      entry.seenVersion = version;
+  function markSeenMac(id, version) {
+    const e = myApps.find(a => a.id === id);
+    if (e) { e.seenMac = version; saveMyApps(); }
+  }
+
+  function markSeenWin(id, version) {
+    const e = myApps.find(a => a.id === id);
+    if (e) { e.seenWin = version; saveMyApps(); }
+  }
+
+  function markSeenAll(id) {
+    const e = myApps.find(a => a.id === id);
+    const rel = releases[id];
+    if (e && rel) {
+      if (rel.mac?.version) e.seenMac = rel.mac.version;
+      if (rel.win?.version) e.seenWin = rel.win.version;
       saveMyApps();
     }
   }
 
-  // ── Release data cache ───────────────────────────────────────────────────────
-  // { [catalogId]: { version, fetchedAt, error } }
+  // ── Release cache ────────────────────────────────────────────────────────────
+  // releases[id] = { mac: { version, sourceUrl, error } | null,
+  //                  win: { version, sourceUrl, error } | null,
+  //                  fetchedAt }
   let releases = {};
 
   function loadReleases() {
     try {
-      const saved = localStorage.getItem(RELEASES_KEY);
-      if (saved) releases = JSON.parse(saved);
+      const s = localStorage.getItem(RELEASES_KEY);
+      if (s) releases = JSON.parse(s);
     } catch { releases = {}; }
   }
 
@@ -100,44 +74,51 @@ const Store = (() => {
     try { localStorage.setItem(RELEASES_KEY, JSON.stringify(releases)); } catch {}
   }
 
-  function setRelease(catalogId, data) {
-    releases[catalogId] = { ...data, fetchedAt: Date.now() };
+  function setRelease(id, data) {
+    releases[id] = { ...data, fetchedAt: Date.now() };
+    // First-time baseline: auto-set seenMac/seenWin so we don't flag everything as "new" on first load
+    const entry = myApps.find(a => a.id === id);
+    if (entry) {
+      if (entry.seenMac === null && data.mac?.version) entry.seenMac = data.mac.version;
+      if (entry.seenWin === null && data.win?.version) entry.seenWin = data.win.version;
+      saveMyApps();
+    }
     saveReleases();
   }
 
-  function getRelease(catalogId) {
-    return releases[catalogId] || null;
+  function getRelease(id) { return releases[id] || null; }
+
+  // ── Cross-platform stats ─────────────────────────────────────────────────────
+  function isNewRelease(entry, rel, platform) {
+    if (!rel) return false;
+    const data = rel[platform];
+    const seen = entry[platform === 'mac' ? 'seenMac' : 'seenWin'];
+    return !!(data?.version && seen && data.version !== seen);
   }
 
   function getDashboardStats() {
-    const tracked = myApps.length;
-    let newReleases = 0;
-    let upToDate = 0;
-    let unknown = 0;
-    for (const app of myApps) {
-      const rel = releases[app.id];
-      if (!rel || rel.error) { unknown++; continue; }
-      const isNew = app.seenVersion && rel.version && rel.version !== app.seenVersion;
-      const isFirst = !app.seenVersion && rel.version;
-      if (isNew || isFirst) { newReleases++; } else { upToDate++; }
+    let newReleases = 0, upToDate = 0, unknown = 0;
+    for (const entry of myApps) {
+      const rel = releases[entry.id];
+      if (!rel) { unknown++; continue; }
+      const macNew = isNewRelease(entry, rel, 'mac');
+      const winNew = isNewRelease(entry, rel, 'win');
+      if (macNew || winNew) newReleases++;
+      else if (rel.mac?.version || rel.win?.version) upToDate++;
+      else unknown++;
     }
-    return { tracked, newReleases, upToDate, unknown };
+    return { tracked: myApps.length, newReleases, upToDate, unknown };
   }
 
   // ── Bootstrap ────────────────────────────────────────────────────────────────
   function load() {
-    loadPackages();
     loadMyApps();
     loadReleases();
   }
 
   return {
     load,
-    // packages
-    setAll, getAll, getById, update: updatePkg, getStats,
-    // my apps
-    addApp, removeApp, isTracked, getMyApps, markSeen,
-    // releases
-    setRelease, getRelease, getDashboardStats,
+    addApp, removeApp, isTracked, getMyApps, markSeenMac, markSeenWin, markSeenAll,
+    setRelease, getRelease, getDashboardStats, isNewRelease,
   };
 })();

@@ -21,12 +21,11 @@
         </div>
         <div>
           <div class="logo-text">PatchBoards</div>
-          <div class="logo-sub">Software release tracker</div>
+          <div class="logo-sub">Enterprise software release tracker · Mac &amp; Windows</div>
         </div>
       </div>
       <div class="topbar-actions">
         <button id="refreshBtn" class="btn" onclick="App.fetchReleases()">↺ Refresh</button>
-        <button id="scanAllBtn" class="btn" onclick="App.scanCVEs()">AI scan for CVEs</button>
         <button class="btn primary" onclick="UI.openCatalog()">+ Browse Software</button>
       </div>
     </header>
@@ -44,62 +43,38 @@
       <div id="scanStatusText" class="scan-status">Loading…</div>
     </div>
 
-    <div class="view-tabs">
-      <button class="tab-btn active" id="tab-dashboard" onclick="App.setView('dashboard', this)">My Dashboard</button>
-      <button class="tab-btn" id="tab-installed" onclick="App.setView('installed', this)">Installed Packages</button>
+    <div class="section-header">
+      <span class="section-title" id="dashboardTitle">My Apps</span>
+      <input type="text" id="searchInput" class="search-input" placeholder="Search…" oninput="App.render()">
     </div>
 
-    <!-- Dashboard view -->
-    <div id="dashboardView">
-      <div class="section-header">
-        <span class="section-title" id="dashboardTitle">My Apps</span>
-        <input type="text" id="searchInput" class="search-input" placeholder="Search…" oninput="App.render()">
-      </div>
-      <div id="emptyDashboard" class="empty-state" style="display:none">
-        <div class="empty-icon">📋</div>
-        <div class="empty-title">No apps on your dashboard yet</div>
-        <div class="empty-desc">Browse the software catalog to add apps you want to track new releases for.</div>
-        <button class="btn primary" style="margin-top:1rem;" onclick="UI.openCatalog()">+ Browse Software Catalog</button>
-      </div>
-      <div id="appGrid" class="app-grid"></div>
+    <div id="emptyDashboard" class="empty-state" style="display:none">
+      <div class="empty-icon">📋</div>
+      <div class="empty-title">No apps on your dashboard yet</div>
+      <div class="empty-desc">Browse the software catalog to add apps your enterprise supports. New releases will appear here automatically.</div>
+      <button class="btn primary" style="margin-top:1rem;" onclick="UI.openCatalog()">+ Browse Software Catalog</button>
     </div>
 
-    <!-- Installed packages view -->
-    <div id="installedView" style="display:none">
-      <div class="section-header">
-        <span class="section-title" id="sectionTitle">All packages</span>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input type="text" id="pkgSearchInput" class="search-input" placeholder="Search…" oninput="App.renderInstalled()">
-        </div>
-      </div>
-      <div class="tab-nav">
-        <button class="active" onclick="App.setInstalledTab('all', this)">All</button>
-        <button onclick="App.setInstalledTab('action', this)">Needs action</button>
-        <button onclick="App.setInstalledTab('security', this)">Security</button>
-        <button onclick="App.setInstalledTab('ok', this)">Up to date</button>
-        <button onclick="App.setInstalledTab('unscanned', this)">Not scanned</button>
-      </div>
-      <div id="pkgList" class="pkg-list"></div>
-    </div>
+    <div id="appGrid" class="app-grid"></div>
 
   </div>
 
-  <!-- Catalog overlay -->
+  <!-- Catalog slide-in panel -->
   <div id="catalogOverlay" class="catalog-overlay" style="display:none" onclick="UI.closeCatalogOnBg(event)">
     <div class="catalog-panel">
       <div class="catalog-header">
         <div>
           <h2 class="catalog-title">Software Catalog</h2>
-          <p class="catalog-subtitle">Select apps to track on your dashboard</p>
+          <p class="catalog-subtitle">Add apps to track Mac and Windows releases side-by-side</p>
         </div>
         <button class="btn catalog-close" onclick="UI.closeCatalog()">✕ Close</button>
       </div>
       <div class="catalog-search-row">
         <input type="text" id="catalogSearch" class="catalog-search" placeholder="Search software…" oninput="UI.renderCatalog()">
         <div id="platformFilter" class="platform-filter">
-          <button class="pf-btn active" data-platform="all" onclick="UI.setPlatformFilter('all', this)">All</button>
-          <button class="pf-btn" data-platform="mac" onclick="UI.setPlatformFilter('mac', this)">Mac</button>
-          <button class="pf-btn" data-platform="win" onclick="UI.setPlatformFilter('win', this)">Windows</button>
+          <button class="pf-btn active" onclick="UI.setPlatformFilter('all', this)">All</button>
+          <button class="pf-btn" onclick="UI.setPlatformFilter('mac', this)">🍎 Mac only</button>
+          <button class="pf-btn" onclick="UI.setPlatformFilter('win', this)">🪟 Win only</button>
         </div>
       </div>
       <div id="categoryFilters" class="category-filters"></div>
@@ -111,7 +86,6 @@
   <script src="js/catalog.js"></script>
   <script src="js/store.js"></script>
   <script src="js/fetcher.js"></script>
-  <script src="js/scanner.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/app.js"></script>
 </body>

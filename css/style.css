@@ -111,33 +111,44 @@ body { min-height: 100vh; }
 .empty       { text-align:center; padding:2.5rem; color:var(--text-3); font-size:14px; background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg); }
 
 /* ── Dashboard: App cards ────────────────────────────────────────────────── */
-.app-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; }
+.app-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:10px; }
 
 .app-card { background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:14px; transition:border-color 0.15s; display:flex; flex-direction:column; gap:10px; }
 .app-card:hover { border-color:var(--border-2); }
+.app-card.card-has-update { border-color:rgba(146,64,14,0.4); background:var(--warning-bg); }
+@media (prefers-color-scheme: dark) {
+  .app-card.card-has-update { border-color:rgba(251,191,36,0.3); background:#1a1200; }
+}
 
-.app-card-top { display:flex; align-items:flex-start; gap:10px; }
-.app-card-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; background:var(--bg-secondary); }
-.app-card-icon.status-update  { background:var(--warning-bg); }
-.app-card-icon.status-ok      { background:var(--success-bg); }
-.app-card-icon.status-default { background:var(--bg-secondary); }
-
+.app-card-header { display:flex; align-items:flex-start; gap:10px; }
+.app-card-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; background:var(--bg-secondary); }
 .app-card-meta { flex:1; min-width:0; }
-.app-card-name-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:3px; }
+.app-card-name-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:2px; }
 .app-card-name { font-size:13px; font-weight:500; }
-.app-card-category { font-size:11px; color:var(--text-3); display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+.app-card-category { font-size:11px; color:var(--text-3); }
 
 .app-remove-btn { padding:3px 7px; font-size:14px; color:var(--text-3); border-color:transparent; background:transparent; line-height:1; flex-shrink:0; margin-left:auto; }
 .app-remove-btn:hover { color:var(--danger-text); border-color:var(--danger-border); background:var(--danger-bg); }
 
-.app-card-body { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; }
-.app-card-version { display:flex; align-items:center; gap:5px; }
-.app-card-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-.app-link { font-size:12px; color:var(--info-text); text-decoration:none; }
-.app-link:hover { text-decoration:underline; }
+/* Per-platform rows inside each card */
+.app-platforms { display:flex; flex-direction:column; gap:5px; }
 
-.app-card-cmd { background:var(--bg-secondary); border-radius:6px; padding:6px 10px; }
-.app-card-cmd code { font-size:11px; font-family:'SF Mono','Fira Code',monospace; color:var(--text-2); }
+.plat-row { display:grid; grid-template-columns:90px auto 1fr auto; align-items:center; gap:8px; font-size:12px; padding:5px 8px; border-radius:6px; background:var(--bg-secondary); }
+.plat-row.has-update { background:rgba(146,64,14,0.08); }
+@media (prefers-color-scheme: dark) { .plat-row.has-update { background:rgba(251,191,36,0.08); } }
+.plat-row.loading, .plat-row.unavailable { opacity:0.6; }
+
+.plat-label   { font-size:11px; font-weight:500; color:var(--text-2); white-space:nowrap; }
+.plat-version { display:flex; align-items:center; gap:4px; }
+.plat-meta    { font-size:11px; }
+.plat-link    { color:var(--info-text); text-decoration:none; }
+.plat-link:hover { text-decoration:underline; }
+.plat-cmd     { font-size:10px; font-family:'SF Mono','Fira Code',monospace; color:var(--text-3); background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
+@media (prefers-color-scheme: dark) { .plat-cmd { background:rgba(255,255,255,0.06); } }
+.muted { color:var(--text-3); font-style:italic; }
+
+.app-card-footer { padding-top:4px; }
+.btn-sm { font-size:12px; padding:5px 10px; }
 
 /* ── Platform badges ─────────────────────────────────────────────────────── */
 .platform-badge { font-size:10px; padding:1px 6px; border-radius:20px; font-weight:500; display:inline-block; }
@@ -161,6 +172,7 @@ body { min-height: 100vh; }
 .vpill { font-size:11px; padding:3px 8px; border-radius:20px; font-family:'SF Mono','Fira Code',monospace; }
 .v-cur { background:var(--bg-secondary); color:var(--text-2); border:0.5px solid var(--border); }
 .v-arr { font-size:11px; color:var(--text-3); }
+.v-ok  { background:var(--bg-secondary); color:var(--text-2); font-family:'SF Mono','Fira Code',monospace; font-size:11px; padding:3px 8px; border-radius:20px; border:0.5px solid var(--border); }
 .v-sec { background:var(--danger-bg);  color:var(--danger-text);  font-family:'SF Mono','Fira Code',monospace; font-size:11px; padding:3px 8px; border-radius:20px; font-weight:500; }
 .v-upd { background:var(--warning-bg); color:var(--warning-text); font-family:'SF Mono','Fira Code',monospace; font-size:11px; padding:3px 8px; border-radius:20px; font-weight:500; }
 
@@ -299,13 +311,13 @@ body { min-height: 100vh; }
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
-@media (max-width:600px) {
+@media (max-width:700px) {
   .app { padding:1rem; }
   .app-grid { grid-template-columns:1fr; }
-  .pkg-row { flex-wrap:wrap; }
-  .pkg-right { align-items:flex-start; flex-direction:row; flex-wrap:wrap; }
   .topbar { flex-direction:column; align-items:flex-start; }
   .catalog-panel { width:100vw; }
   .catalog-search-row { flex-direction:column; align-items:stretch; }
   .catalog-search { min-width:0; }
+  .plat-row { grid-template-columns:80px auto 1fr; }
+  .plat-cmd { display:none; }
 }

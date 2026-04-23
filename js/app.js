@@ -1,55 +1,40 @@
 // PatchBoards · app.js
 
 const App = (() => {
-  let currentView = 'dashboard';   // 'dashboard' | 'installed'
-  let installedTab = 'all';
-  let isScanning = false;
 
   // ── Render ───────────────────────────────────────────────────────────────────
   function render() {
-    const q = currentView === 'dashboard'
-      ? (document.getElementById('searchInput')?.value || '')
-      : (document.getElementById('pkgSearchInput')?.value || '');
-
-    UI.renderStats(currentView);
-
-    if (currentView === 'dashboard') {
-      UI.renderDashboard(q);
-    } else {
-      UI.renderInstalledList(installedTab, isScanning, q);
-    }
-  }
-
-  // ── View switching ───────────────────────────────────────────────────────────
-  function setView(view, btn) {
-    currentView = view;
-    document.getElementById('dashboardView').style.display  = view === 'dashboard' ? '' : 'none';
-    document.getElementById('installedView').style.display  = view === 'installed' ? '' : 'none';
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    render();
-  }
-
-  function setInstalledTab(tab, btn) {
-    installedTab = tab;
-    document.querySelectorAll('#installedView .tab-nav button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    render();
+    const q = document.getElementById('searchInput')?.value || '';
+    UI.renderStats();
+    UI.renderDashboard(q);
   }
 
   // ── Boot ─────────────────────────────────────────────────────────────────────
   async function init() {
     Store.load();
     render();
-
-    // Fetch both dashboard releases and installed packages in parallel
-    await Promise.all([
-      fetchReleases(),
-      fetchPackages(),
-    ]);
+    checkGitHubRateLimit();
+    await fetchReleases();
   }
 
-  // ── Dashboard: fetch latest versions from APIs ────────────────────────────────
+  // Warn if GitHub token is missing (soft warning — doesn't block)
+  async function checkGitHubRateLimit() {
+    if (CONFIG.GITHUB_TOKEN) return;
+    try {
+      const res  = await fetch('https://api.github.com/rate_limit', { signal: AbortSignal.timeout(4000) });
+      const data = await res.json();
+      const remaining = data?.rate?.remaining ?? 60;
+      if (remaining < 10) {
+        UI.showBanner(
+          `<strong>GitHub API rate limit low (${remaining} requests remaining).</strong> ` +
+          `Add a <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener">GitHub personal access token</a> ` +
+          `to <code>js/config.js</code> as <code>GITHUB_TOKEN</code> for 5 000 requests/hour.`
+        );
+      }
+    } catch { /* ignore — just a soft check */ }
+  }
+
+  // ── Fetch latest releases for all tracked apps ───────────────────────────────
   async function fetchReleases() {
     const myApps = Store.getMyApps();
     if (!myApps.length) {
@@ -59,53 +44,40 @@ const App = (() => {
 
     UI.setRefreshBtn(true);
     UI.setSpinner(true);
-    UI.setScanStatus(`<strong>Checking latest releases…</strong> 0 of ${myApps.length} apps checked.`);
+    UI.setScanStatus(`<strong>Checking releases…</strong> 0 of ${myApps.length} apps.`);
+    UI.setProgress(0);
 
     let done = 0;
     await Fetcher.fetchAll(myApps, (id, result) => {
       Store.setRelease(id, result);
-      // Auto-set seenVersion on the very first fetch so we have a baseline
-      const entry = Store.getMyApps().find(a => a.id === id);
-      if (entry && !entry.seenVersion && result.version) {
-        Store.markSeen(id, result.version);
-      }
       done++;
-      UI.setScanStatus(`<strong>Checking latest releases…</strong> ${done} of ${myApps.length} apps checked.`);
+      UI.setProgress((done / myApps.length) * 100);
+      UI.setScanStatus(`<strong>Checking releases…</strong> ${done} of ${myApps.length} apps.`);
       render();
     });
 
     UI.setSpinner(false);
     UI.setRefreshBtn(false);
+    UI.setProgress(-1);
 
     const s = Store.getDashboardStats();
     UI.setScanStatus(
       s.newReleases
         ? `<strong>Done.</strong> <span style="color:var(--warning-text)">${s.newReleases} new release${s.newReleases !== 1 ? 's' : ''}</span> available · ${s.upToDate} up to date.`
-        : `<strong>All up to date.</strong> ${s.upToDate} app${s.upToDate !== 1 ? 's' : ''} tracking, no new releases.`
+        : `<strong>All up to date.</strong> ${s.upToDate} app${s.upToDate !== 1 ? 's' : ''} tracked, no new releases.`
     );
     render();
   }
 
-  // ── Dashboard: add / remove / mark seen ─────────────────────────────────────
+  // ── Catalog: add / remove / toggle ───────────────────────────────────────────
   function addApp(id) {
     Store.addApp(id);
-    // Fetch version immediately for the new app
+    // Kick off an immediate version fetch for this new app
     const app = getCatalogApp(id);
     if (app) {
-      Fetcher.fetchAppVersion(app)
-        .then(result => {
-          Store.setRelease(id, result);
-          // Set baseline so first-time tracking starts clean
-          const entry = Store.getMyApps().find(a => a.id === id);
-          if (entry && !entry.seenVersion && result.version) {
-            Store.markSeen(id, result.version);
-          }
-          render();
-        })
-        .catch(err => {
-          Store.setRelease(id, { version: null, error: err.message });
-          render();
-        });
+      Fetcher.fetchBoth(app)
+        .then(result => { Store.setRelease(id, result); render(); })
+        .catch(() => { Store.setRelease(id, { mac: { version: null, error: 'fetch failed' }, win: { version: null, error: 'fetch failed' } }); render(); });
     }
     render();
   }
@@ -127,130 +99,16 @@ const App = (() => {
       btn.classList.remove('primary');
       btn.classList.add('tracked');
     }
-    // Re-render the catalog card
     UI.renderCatalog();
     render();
   }
 
   function markSeen(id) {
-    const release = Store.getRelease(id);
-    if (release?.version) {
-      Store.markSeen(id, release.version);
-      render();
-    }
-  }
-
-  // ── Installed packages: fetch from local server ──────────────────────────────
-  async function fetchPackages() {
-    try {
-      const res = await fetch(`${CONFIG.SERVER_URL}/packages`, { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      Store.setAll(data.packages);
-      UI.showBanner(null);
-    } catch (err) {
-      console.warn('Server fetch failed:', err);
-      UI.showBanner(
-        `<strong>Local server not running.</strong> ` +
-        `Open your terminal in the project folder and run: <code>./start.sh</code> — then click ↺ Refresh. ` +
-        `Dashboard release tracking works without the server.`
-      );
-      if (Store.getAll().length === 0) Store.setAll([]);
-    }
+    Store.markSeenAll(id);
     render();
   }
 
-  // ── CVE scanning (installed packages view) ──────────────────────────────────
-  function markUpdated(id) {
-    const p = Store.getById(id);
-    if (!p) return;
-    Store.update(id, { version: p.latest || p.version, status: 'ok', note: '', cves: [] });
-    render();
-  }
-
-  async function scanOne(id) {
-    if (isScanning) return;
-    const p = Store.getById(id);
-    if (!p) return;
-    Store.update(id, { status: 'scanning' });
-    render();
-    try {
-      const result = await Scanner.checkPackage(p.name, p.version, p.latest);
-      const newStatus = result.isSecurity ? 'security' : (p.latest && p.latest !== p.version ? 'update' : 'ok');
-      Store.update(id, { ...result, status: newStatus });
-    } catch (err) {
-      Store.update(id, {
-        status: p.latest && p.latest !== p.version ? 'update' : 'ok',
-        note: `CVE scan failed: ${err.message}`,
-      });
-    }
-    render();
-  }
-
-  async function scanCVEs() {
-    if (isScanning) return;
-    if (CONFIG.ANTHROPIC_API_KEY === 'YOUR_API_KEY_HERE') {
-      alert('Add your Anthropic API key in js/config.js to enable AI CVE scanning.');
-      return;
-    }
-
-    const toScan = Store.getAll().filter(p => p.status === 'update' || p.status === 'unscanned');
-    if (!toScan.length) {
-      UI.setScanStatus('<strong>Nothing to scan.</strong> All packages are up to date or already checked.');
-      return;
-    }
-
-    isScanning = true;
-    UI.setScanBtn(true);
-    UI.setSpinner(true);
-
-    let done = 0;
-    const updateProgress = () => {
-      UI.setProgress((done / toScan.length) * 100);
-      UI.setScanStatus(`<strong>Scanning for CVEs…</strong> ${done} of ${toScan.length} packages checked.`);
-    };
-    updateProgress();
-
-    for (const p of toScan) {
-      Store.update(p.id, { status: 'scanning' });
-      render();
-      try {
-        const result = await Scanner.checkPackage(p.name, p.version, p.latest);
-        const newStatus = result.isSecurity ? 'security' : (p.latest && p.latest !== p.version ? 'update' : 'ok');
-        Store.update(p.id, { ...result, status: newStatus });
-      } catch (err) {
-        Store.update(p.id, {
-          status: p.latest && p.latest !== p.version ? 'update' : 'ok',
-          note: `CVE scan failed: ${err.message}`,
-        });
-      }
-      done++;
-      updateProgress();
-      render();
-    }
-
-    isScanning = false;
-    UI.setScanBtn(false);
-    UI.setSpinner(false);
-    UI.setProgress(-1);
-
-    const s = Store.getStats();
-    UI.setScanStatus(
-      `<strong>CVE scan complete.</strong> ` +
-      `<span style="color:var(--danger-text)">${s.security} security patch${s.security !== 1 ? 'es' : ''}</span> · ` +
-      `<span style="color:var(--warning-text)">${s.updates} regular update${s.updates !== 1 ? 's' : ''}</span> · ` +
-      `<span style="color:var(--success-text)">${s.ok} up to date</span>`
-    );
-  }
-
-  return {
-    init, render, setView, setInstalledTab,
-    fetchReleases, fetchPackages,
-    addApp, removeApp, toggleApp, markSeen,
-    markUpdated, scanOne, scanCVEs,
-  };
+  return { init, render, fetchReleases, addApp, removeApp, toggleApp, markSeen };
 })();
 
 document.addEventListener('DOMContentLoaded', () => App.init());
