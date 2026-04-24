@@ -22,7 +22,7 @@ const UI = (() => {
 
   // ── Platform version row ─────────────────────────────────────────────────────
   function platformVersionRow(platform, data, currentVersion, app) {
-    const label = platform === 'mac' ? '🍎 Mac' : '🪟 Windows';
+    const label = platform === 'mac' ? 'Mac' : 'Windows';
     const pkg   = platform === 'mac' ? app.brew : app.winget;
 
     if (!pkg) return '';
@@ -100,7 +100,7 @@ const UI = (() => {
     return `
       <div class="app-card ${anyNew ? 'card-has-update' : ''}" id="appcard-${app.id}">
         <div class="app-card-header">
-          <div class="app-card-icon">${app.icon}</div>
+          <div class="app-card-icon">${app.name.charAt(0)}</div>
           <div class="app-card-meta">
             <div class="app-card-name-row">
               <span class="app-card-name">${app.name}</span>
@@ -115,7 +115,7 @@ const UI = (() => {
         </div>
         <div class="app-card-footer">
           <span class="current-version-label">${versionLabel}</span>
-          <button class="btn btn-sm" onclick="UI.openVersionModal('${app.id}', true)">✏ Edit version</button>
+          <button class="btn btn-sm" onclick="UI.openVersionModal('${app.id}', true)">Edit version</button>
         </div>
       </div>`;
   }
@@ -171,7 +171,6 @@ const UI = (() => {
     _modalAppId  = catalogId;
     _modalIsEdit = isEdit;
 
-    document.getElementById('versionModalIcon').textContent  = app.icon;
     document.getElementById('versionModalName').textContent  = app.name;
     document.getElementById('versionModalAction').textContent = isEdit ? 'Update version' : 'Add to Dashboard';
 
@@ -275,11 +274,11 @@ const UI = (() => {
     grid.innerHTML = apps.map(app => {
       const tracked = Store.isTracked(app.id);
       const platBadges = app.platforms.map(p =>
-        `<span class="platform-badge platform-${p}">${p === 'mac' ? '🍎 Mac' : '🪟 Win'}</span>`
+        `<span class="platform-badge platform-${p}">${p === 'mac' ? 'Mac' : 'Win'}</span>`
       ).join('');
       return `
         <div class="catalog-card ${tracked ? 'is-tracked' : ''}">
-          <div class="catalog-card-icon">${app.icon}</div>
+          <div class="catalog-card-icon">${app.name.charAt(0)}</div>
           <div class="catalog-card-body">
             <div class="catalog-card-name">${app.name}</div>
             <div class="catalog-card-desc">${app.desc}</div>
@@ -289,7 +288,7 @@ const UI = (() => {
             </div>
           </div>
           ${tracked
-            ? `<button class="btn catalog-track-btn tracked" onclick="App.removeApp('${app.id}'); UI.renderCatalog(); App.render();">✓ Tracked</button>`
+            ? `<button class="btn catalog-track-btn tracked" onclick="App.removeApp('${app.id}'); UI.renderCatalog(); App.render();">Tracked</button>`
             : `<button class="btn catalog-track-btn primary"  onclick="UI.openVersionModal('${app.id}', false)">+ Track</button>`
           }
         </div>`;
