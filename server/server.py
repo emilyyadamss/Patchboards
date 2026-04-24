@@ -6,6 +6,7 @@ then serves the data to the dashboard on http://localhost:4242
 """
 
 import json
+import re
 import subprocess
 import sys
 import os
@@ -153,7 +154,58 @@ def get_homebrew_packages():
     return result
 
 
-# ── winget (stub — runs on Windows only) ────────────────────────────────────
+# ── winget (runs on Windows only) ───────────────────────────────────────────
+
+def parse_winget_table(text):
+    """
+    Parse winget's fixed-width table output into a list of dicts.
+    Uses the separator line (-----  -----  -----) to determine column positions,
+    which is the only reliable way to handle names and IDs that contain spaces.
+    """
+    lines = text.splitlines()
+
+    # Find the separator line — a line composed almost entirely of dashes and spaces
+    sep_idx = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if len(stripped) > 20:
+            non_space = stripped.replace(" ", "")
+            if non_space and non_space.count("-") / len(non_space) > 0.8:
+                sep_idx = i
+                break
+
+    if sep_idx is None or sep_idx == 0:
+        return []
+
+    sep_line = lines[sep_idx]
+    # Each dash-run marks one column's character span
+    spans = [(m.start(), m.end()) for m in re.finditer(r"-+", sep_line)]
+    if not spans:
+        return []
+
+    def extract(line, col_idx):
+        if col_idx >= len(spans):
+            return ""
+        s, e = spans[col_idx]
+        return line[s : min(e, len(line))].strip()
+
+    result = []
+    for line in lines[sep_idx + 1 :]:
+        if not line.strip() or re.match(r"^\d+ package", line.strip(), re.I):
+            continue
+        name    = extract(line, 0)
+        pkg_id  = extract(line, 1)
+        version = extract(line, 2)
+        avail   = extract(line, 3) if len(spans) > 3 else ""
+        if name and version and version not in ("Version", "Unknown", "<Unknown>"):
+            result.append({
+                "name":      name,
+                "pkgId":     pkg_id,
+                "version":   version,
+                "available": avail or None,
+            })
+    return result
+
 
 def get_winget_packages():
     """
@@ -167,42 +219,47 @@ def get_winget_packages():
     try:
         result = subprocess.run(
             ["winget", "list", "--accept-source-agreements"],
-            capture_output=True, text=True, timeout=60
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
         )
-        lines = result.stdout.strip().splitlines()
-        # Skip header rows (winget output has 2 header lines + separator)
-        data_lines = [l for l in lines if l.strip() and not l.startswith("-") and not l.lower().startswith("name")]
-        for line in data_lines:
-            parts = line.split()
-            if len(parts) >= 3:
-                packages.append({
-                    "name":    parts[0],
-                    "version": parts[2] if len(parts) > 2 else "?",
-                    "manager": "winget",
-                    "type":    "winget",
-                    "status":  "unscanned",
-                    "latest":  None,
-                    "isSecurity": False,
-                    "note":    "",
-                    "sourceUrl": "",
-                })
+        for p in parse_winget_table(result.stdout):
+            pkg_id = p["pkgId"]
+            packages.append({
+                "name":       p["name"],
+                "wingetId":   pkg_id,
+                "version":    p["version"],
+                "manager":    "winget",
+                "type":       "winget",
+                "status":     "ok",
+                "latest":     None,
+                "isSecurity": False,
+                "note":       "",
+                "sourceUrl":  (
+                    f"https://winget.run/pkg/{pkg_id.replace('.', '/', 1)}"
+                    if pkg_id and "." in pkg_id else ""
+                ),
+            })
     except Exception as e:
         print(f"[winget list] {e}")
 
-    # Check outdated
+    # Mark packages that have updates available
     try:
         result = subprocess.run(
             ["winget", "upgrade", "--accept-source-agreements"],
-            capture_output=True, text=True, timeout=60
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
         )
-        outdated_names = set()
-        for line in result.stdout.splitlines():
-            parts = line.split()
-            if len(parts) >= 4:
-                outdated_names.add(parts[0].lower())
+        # Build a lookup by winget ID (IDs never contain spaces, so they're reliable)
+        upgradeable = {
+            p["pkgId"].lower(): p["available"]
+            for p in parse_winget_table(result.stdout)
+            if p["pkgId"]
+        }
         for pkg in packages:
-            if pkg["name"].lower() in outdated_names:
+            wid = pkg["wingetId"].lower()
+            if wid in upgradeable:
                 pkg["status"] = "update"
+                pkg["latest"] = upgradeable[wid]
     except Exception as e:
         print(f"[winget upgrade] {e}")
 

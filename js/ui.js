@@ -3,6 +3,10 @@
 let _catalogPlatform = 'all';
 let _catalogCategory = 'all';
 
+// Tracks which app the version modal is acting on, and whether it's an edit
+let _modalAppId   = null;
+let _modalIsEdit  = false;
+
 const UI = (() => {
 
   // ── Stats bar ────────────────────────────────────────────────────────────────
@@ -17,14 +21,11 @@ const UI = (() => {
   }
 
   // ── Platform version row ─────────────────────────────────────────────────────
-  function platformVersionRow(platform, data, seen, app) {
-    const label  = platform === 'mac' ? '🍎 Mac' : '🪟 Windows';
-    const pkg    = platform === 'mac' ? app.brew : app.winget;
-    const mgr    = platform === 'mac'
-      ? (app.brewType === 'formula' ? 'homebrew' : 'homebrew-cask')
-      : 'winget';
+  function platformVersionRow(platform, data, currentVersion, app) {
+    const label = platform === 'mac' ? '🍎 Mac' : '🪟 Windows';
+    const pkg   = platform === 'mac' ? app.brew : app.winget;
 
-    if (!pkg) return '';   // app doesn't support this platform
+    if (!pkg) return '';
 
     if (!data) {
       return `
@@ -42,16 +43,22 @@ const UI = (() => {
         </div>`;
     }
 
-    const isNew = seen && data.version !== seen;
-    const versionHtml = isNew
-      ? `<span class="vpill v-cur">${seen}</span><span class="v-arr">→</span><span class="vpill v-upd">${data.version}</span>`
-      : `<span class="vpill v-ok">${data.version}</span>`;
+    const isNew = currentVersion && data.version !== currentVersion;
 
-    const cmd = mgr === 'homebrew-cask'
-      ? `brew upgrade --cask ${pkg}`
-      : mgr === 'homebrew'
-      ? `brew upgrade ${pkg}`
-      : `winget upgrade ${pkg}`;
+    let versionHtml;
+    if (currentVersion && isNew) {
+      // User's version → latest available
+      versionHtml = `
+        <span class="vpill v-cur" title="Your current version">${currentVersion}</span>
+        <span class="v-arr">→</span>
+        <span class="vpill v-upd" title="Latest available">${data.version}</span>`;
+    } else if (currentVersion) {
+      // User's version matches latest — up to date
+      versionHtml = `<span class="vpill v-ok">${data.version}</span>`;
+    } else {
+      // No version entered — just show latest
+      versionHtml = `<span class="vpill v-cur" title="Latest available">${data.version}</span>`;
+    }
 
     const link = data.sourceUrl
       ? `<a href="${data.sourceUrl}" target="_blank" rel="noopener" class="plat-link">release notes ↗</a>`
@@ -62,7 +69,6 @@ const UI = (() => {
         <span class="plat-label">${label}</span>
         <span class="plat-version">${versionHtml}</span>
         <span class="plat-meta">${link}</span>
-        <code class="plat-cmd">${cmd}</code>
       </div>`;
   }
 
@@ -72,18 +78,24 @@ const UI = (() => {
     const winNew = Store.isNewRelease(entry, release, 'win');
     const anyNew = macNew || winNew;
 
-    const badgeHtml = anyNew
-      ? `<span class="badge b-upd">new release</span>`
-      : (release
-          ? `<span class="badge b-ok">up to date</span>`
-          : `<span class="badge b-loading">checking…</span>`);
+    let badgeHtml;
+    if (!release) {
+      badgeHtml = `<span class="badge b-loading">checking…</span>`;
+    } else if (!entry.currentVersion) {
+      badgeHtml = `<span class="badge b-default">no version set</span>`;
+    } else if (anyNew) {
+      badgeHtml = `<span class="badge b-upd">new release</span>`;
+    } else {
+      badgeHtml = `<span class="badge b-ok">up to date</span>`;
+    }
 
-    const macRow = platformVersionRow('mac', release?.mac || null, entry.seenMac, app);
-    const winRow = platformVersionRow('win', release?.win || null, entry.seenWin, app);
+    const cv = entry.currentVersion;
+    const versionLabel = cv
+      ? `Your version: <strong>${cv}</strong>`
+      : `<span class="muted">No version set</span>`;
 
-    const markSeenBtn = anyNew
-      ? `<button class="btn btn-sm" onclick="App.markSeen('${app.id}')">Mark all as seen</button>`
-      : '';
+    const macRow = platformVersionRow('mac', release?.mac || null, cv, app);
+    const winRow = platformVersionRow('win', release?.win || null, cv, app);
 
     return `
       <div class="app-card ${anyNew ? 'card-has-update' : ''}" id="appcard-${app.id}">
@@ -101,7 +113,10 @@ const UI = (() => {
         <div class="app-platforms">
           ${macRow}${winRow}
         </div>
-        ${markSeenBtn ? `<div class="app-card-footer">${markSeenBtn}</div>` : ''}
+        <div class="app-card-footer">
+          <span class="current-version-label">${versionLabel}</span>
+          <button class="btn btn-sm" onclick="UI.openVersionModal('${app.id}', true)">✏ Edit version</button>
+        </div>
       </div>`;
   }
 
@@ -131,7 +146,6 @@ const UI = (() => {
       });
     }
 
-    // Sort: apps with new releases first, then alphabetical
     filtered = [...filtered].sort((a, b) => {
       const ra = Store.getRelease(a.id);
       const rb = Store.getRelease(b.id);
@@ -147,6 +161,65 @@ const UI = (() => {
     }).join('');
 
     document.getElementById('dashboardTitle').textContent = `My Apps (${myApps.length})`;
+  }
+
+  // ── Version modal ─────────────────────────────────────────────────────────────
+  // Used both when first adding an app (isEdit=false) and editing later (isEdit=true).
+  function openVersionModal(catalogId, isEdit = false) {
+    const app = getCatalogApp(catalogId);
+    if (!app) return;
+    _modalAppId  = catalogId;
+    _modalIsEdit = isEdit;
+
+    document.getElementById('versionModalIcon').textContent  = app.icon;
+    document.getElementById('versionModalName').textContent  = app.name;
+    document.getElementById('versionModalAction').textContent = isEdit ? 'Update version' : 'Add to Dashboard';
+
+    const entry = Store.getMyApps().find(a => a.id === catalogId);
+    const existing = entry?.currentVersion || '';
+    const input = document.getElementById('versionModalInput');
+    input.value = existing;
+    input.placeholder = getVersionPlaceholder(app);
+
+    document.getElementById('versionModal').style.display = 'flex';
+    input.focus();
+    input.select();
+  }
+
+  function closeVersionModal() {
+    document.getElementById('versionModal').style.display = 'none';
+    _modalAppId  = null;
+    _modalIsEdit = false;
+  }
+
+  function closeVersionModalOnBg(e) {
+    if (e.target === document.getElementById('versionModal')) closeVersionModal();
+  }
+
+  function getVersionPlaceholder(app) {
+    // Show a contextual example version based on the app
+    const examples = {
+      'google-chrome': '126.0.6478.127',
+      'firefox':       '127.0.2',
+      'visual-studio-code': '1.91.0',
+      'slack':         '4.38.125',
+      'zoom':          '6.1.1.610',
+    };
+    return examples[app.id] || 'e.g. 1.0.0';
+  }
+
+  // Called by the modal's confirm button
+  function confirmVersionModal() {
+    if (!_modalAppId) return;
+    const version = document.getElementById('versionModalInput').value.trim();
+    App.confirmVersion(_modalAppId, version, _modalIsEdit);
+    closeVersionModal();
+  }
+
+  // Allow Enter key to submit the modal
+  function versionModalKeydown(e) {
+    if (e.key === 'Enter') confirmVersionModal();
+    if (e.key === 'Escape') closeVersionModal();
   }
 
   // ── Catalog overlay ──────────────────────────────────────────────────────────
@@ -215,10 +288,10 @@ const UI = (() => {
               ${platBadges}
             </div>
           </div>
-          <button class="btn catalog-track-btn ${tracked ? 'tracked' : 'primary'}"
-                  onclick="App.toggleApp('${app.id}', this)">
-            ${tracked ? '✓ Tracked' : '+ Track'}
-          </button>
+          ${tracked
+            ? `<button class="btn catalog-track-btn tracked" onclick="App.removeApp('${app.id}'); UI.renderCatalog(); App.render();">✓ Tracked</button>`
+            : `<button class="btn catalog-track-btn primary"  onclick="UI.openVersionModal('${app.id}', false)">+ Track</button>`
+          }
         </div>`;
     }).join('');
   }
@@ -242,6 +315,8 @@ const UI = (() => {
     renderStats, renderDashboard,
     openCatalog, closeCatalog, closeCatalogOnBg, renderCatalog,
     setPlatformFilter, setCategoryFilter,
+    openVersionModal, closeVersionModal, closeVersionModalOnBg,
+    confirmVersionModal, versionModalKeydown,
     setScanStatus, setProgress, setSpinner, setRefreshBtn, showBanner,
   };
 })();

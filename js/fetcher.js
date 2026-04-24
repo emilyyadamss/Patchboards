@@ -5,7 +5,12 @@
 //         https://formulae.brew.sh/api/cask/{name}.json
 //         https://formulae.brew.sh/api/formula/{name}.json
 //
-// Win  → GitHub winget-pkgs repo directory listing
+// Win  → Priority chain per app:
+//   1. GitHub Releases API  (apps with catalog.github field)
+//         https://api.github.com/repos/{owner}/{repo}/releases/latest
+//   2. winget.run public API  (apps with catalog.winget field, no auth)
+//         https://winget.run/api/v2/packages/{Publisher}/{Name}
+//   3. winget-pkgs repo listing  (fallback)
 //         https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/…
 //         60 req/hr unauthenticated → set CONFIG.GITHUB_TOKEN for 5 000/hr
 
@@ -30,6 +35,13 @@ const Fetcher = (() => {
     );
     return [...(stable.length ? stable : versions)]
       .sort((a, b) => compareVersions(b, a))[0] || null;
+  }
+
+  function cleanVersion(tagName) {
+    if (!tagName) return null;
+    let v = tagName.replace(/^[vV]/, '');
+    v = v.replace(/\.windows\.\d+$/, '');
+    return v || null;
   }
 
   // ── Homebrew (Mac) ───────────────────────────────────────────────────────────
@@ -59,7 +71,58 @@ const Fetcher = (() => {
     };
   }
 
-  // ── winget-pkgs GitHub repo (Windows) ───────────────────────────────────────
+  // ── GitHub Releases (Windows — open-source apps) ────────────────────────────
+  async function fetchGitHubRelease(repoPath) {
+    const headers = { Accept: 'application/vnd.github.v3+json' };
+    if (CONFIG.GITHUB_TOKEN) headers['Authorization'] = `token ${CONFIG.GITHUB_TOKEN}`;
+
+    const res = await fetch(
+      `https://api.github.com/repos/${repoPath}/releases/latest`,
+      { headers, signal: AbortSignal.timeout(10000) }
+    );
+
+    if (res.status === 404) throw new Error('No releases found on GitHub');
+    if (res.status === 403) throw new Error('GitHub rate limit — add GITHUB_TOKEN in config.js');
+    if (!res.ok)            throw new Error(`GitHub Releases API ${res.status}`);
+
+    const d = await res.json();
+    if (!d.tag_name)  throw new Error('No tag_name in response');
+    if (d.prerelease) throw new Error('Latest release is a pre-release');
+
+    return {
+      version:   cleanVersion(d.tag_name),
+      sourceUrl: d.html_url || `https://github.com/${repoPath}/releases`,
+    };
+  }
+
+  // ── winget.run public API (Windows — commercial apps) ───────────────────────
+  async function fetchWingetRun(packageId) {
+    if (!packageId) throw new Error('No winget ID');
+    const dot = packageId.indexOf('.');
+    if (dot < 0) throw new Error('Invalid winget package ID for winget.run');
+    const publisher = packageId.slice(0, dot);
+    const pkg       = packageId.slice(dot + 1);
+
+    const res = await fetch(
+      `https://winget.run/api/v2/packages/${encodeURIComponent(publisher)}/${encodeURIComponent(pkg)}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+
+    if (res.status === 404) throw new Error('Package not found on winget.run');
+    if (!res.ok)            throw new Error(`winget.run API ${res.status}`);
+
+    const d = await res.json();
+    const versions = (d.Versions || []).map(v => v.PackageVersion).filter(Boolean);
+    const latest   = pickLatest(versions);
+    if (!latest) throw new Error('No versions found on winget.run');
+
+    return {
+      version:   latest,
+      sourceUrl: `https://winget.run/pkg/${publisher}/${pkg}`,
+    };
+  }
+
+  // ── winget-pkgs GitHub repo (Windows — fallback) ─────────────────────────────
   // Package ID "Google.Chrome" → manifests/g/Google/Chrome
   function wingetIdToPath(packageId) {
     const dot = packageId.indexOf('.');
@@ -96,6 +159,25 @@ const Fetcher = (() => {
     };
   }
 
+  // ── Windows version dispatch: GitHub Releases → winget.run → winget-pkgs ────
+  async function fetchWindowsVersion(catalogApp) {
+    if (catalogApp.github) {
+      try { return await fetchGitHubRelease(catalogApp.github); }
+      catch (e) { console.debug(`[GH Releases] ${catalogApp.id}: ${e.message}`); }
+    }
+
+    if (catalogApp.winget) {
+      try { return await fetchWingetRun(catalogApp.winget); }
+      catch (e) { console.debug(`[winget.run] ${catalogApp.id}: ${e.message}`); }
+    }
+
+    if (catalogApp.winget) {
+      return await fetchWinget(catalogApp.winget);
+    }
+
+    throw new Error('No Windows source available');
+  }
+
   // ── Fetch both platforms in parallel ────────────────────────────────────────
   async function fetchBoth(catalogApp) {
     const [macResult, winResult] = await Promise.allSettled([
@@ -105,9 +187,9 @@ const Fetcher = (() => {
             : fetchBrewCask(catalogApp.brew))
         : Promise.reject(new Error('No brew package')),
 
-      catalogApp.winget
-        ? fetchWinget(catalogApp.winget)
-        : Promise.reject(new Error('No winget package')),
+      (catalogApp.winget || catalogApp.github)
+        ? fetchWindowsVersion(catalogApp)
+        : Promise.reject(new Error('No Windows package')),
     ]);
 
     return {

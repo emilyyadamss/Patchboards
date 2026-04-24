@@ -52,7 +52,7 @@ body { min-height: 100vh; }
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
 .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:12px; }
 .logo { display:flex; align-items:center; gap:10px; }
-.logo-icon { width:34px; height:34px; background:#1a1a2e; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.logo-icon { width:34px; height:34px; background:#c3c3e8; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .logo-text { font-size:17px; font-weight:600; letter-spacing:-0.3px; }
 .logo-sub  { font-size:12px; color:var(--text-3); }
 .topbar-actions { display:flex; gap:8px; flex-wrap:wrap; }
@@ -133,7 +133,7 @@ body { min-height: 100vh; }
 /* Per-platform rows inside each card */
 .app-platforms { display:flex; flex-direction:column; gap:5px; }
 
-.plat-row { display:grid; grid-template-columns:90px auto 1fr auto; align-items:center; gap:8px; font-size:12px; padding:5px 8px; border-radius:6px; background:var(--bg-secondary); }
+.plat-row { display:grid; grid-template-columns:90px auto 1fr; align-items:center; gap:8px; font-size:12px; padding:5px 8px; border-radius:6px; background:var(--bg-secondary); }
 .plat-row.has-update { background:rgba(146,64,14,0.08); }
 @media (prefers-color-scheme: dark) { .plat-row.has-update { background:rgba(251,191,36,0.08); } }
 .plat-row.loading, .plat-row.unavailable { opacity:0.6; }
@@ -143,12 +143,48 @@ body { min-height: 100vh; }
 .plat-meta    { font-size:11px; }
 .plat-link    { color:var(--info-text); text-decoration:none; }
 .plat-link:hover { text-decoration:underline; }
-.plat-cmd     { font-size:10px; font-family:'SF Mono','Fira Code',monospace; color:var(--text-3); background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
-@media (prefers-color-scheme: dark) { .plat-cmd { background:rgba(255,255,255,0.06); } }
 .muted { color:var(--text-3); font-style:italic; }
 
-.app-card-footer { padding-top:4px; }
+.app-card-footer { display:flex; align-items:center; justify-content:space-between; padding-top:6px; border-top:0.5px solid var(--border); gap:8px; flex-wrap:wrap; }
+.current-version-label { font-size:12px; color:var(--text-2); }
+.current-version-label strong { color:var(--text); font-family:'SF Mono','Fira Code',monospace; }
 .btn-sm { font-size:12px; padding:5px 10px; }
+
+/* ── Version input modal ─────────────────────────────────────────────────── */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.45);
+  display:flex; align-items:center; justify-content:center;
+  z-index:2000;
+  backdrop-filter:blur(2px);
+}
+
+.modal-box {
+  background:var(--bg);
+  border:0.5px solid var(--border-2);
+  border-radius:var(--radius-lg);
+  padding:24px;
+  width:min(420px, calc(100vw - 2rem));
+  box-shadow:0 8px 40px rgba(0,0,0,0.18);
+  display:flex; flex-direction:column; gap:14px;
+}
+
+.modal-app-row { display:flex; align-items:center; gap:10px; }
+.modal-app-icon { font-size:24px; }
+.modal-app-name { font-size:16px; font-weight:600; }
+
+.modal-desc { font-size:14px; color:var(--text); line-height:1.5; }
+.modal-hint { font-size:12px; color:var(--text-3); margin-top:-6px; }
+
+.modal-input {
+  font-size:15px; padding:10px 12px;
+  border-radius:var(--radius-md); border:0.5px solid var(--border-2);
+  background:var(--bg-secondary); color:var(--text);
+  font-family:'SF Mono','Fira Code',monospace;
+  outline:none; width:100%;
+}
+.modal-input:focus { border-color:var(--border-3); background:var(--bg); }
+
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; }
 
 /* ── Platform badges ─────────────────────────────────────────────────────── */
 .platform-badge { font-size:10px; padding:1px 6px; border-radius:20px; font-weight:500; display:inline-block; }
@@ -310,6 +346,67 @@ body { min-height: 100vh; }
   .catalog-track-btn.tracked { color:var(--success-text); border-color:rgba(74,222,128,0.3); }
 }
 
+/* ── AI Agent Scan panel ─────────────────────────────────────────────────── */
+.agent-content { flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; }
+
+/* Idle state */
+.agent-idle { display:flex; flex-direction:column; align-items:center; text-align:center; max-width:440px; margin:0 auto; padding:2.5rem 0; gap:16px; }
+.agent-idle-icon { font-size:2.5rem; }
+.agent-idle-title { font-size:17px; font-weight:600; letter-spacing:-0.2px; }
+.agent-idle-desc { font-size:13px; color:var(--text-2); line-height:1.6; }
+.agent-idle-desc code, .agent-idle-note code { font-family:'SF Mono','Fira Code',monospace; background:rgba(0,0,0,0.07); padding:1px 5px; border-radius:4px; font-size:12px; }
+.agent-idle-note { font-size:12px; color:var(--text-3); }
+.agent-scan-btn { font-size:14px; padding:10px 28px; }
+
+/* Prerequisite steps */
+.agent-prereqs { width:100%; display:flex; flex-direction:column; gap:8px; text-align:left; }
+.prereq-item { display:flex; align-items:flex-start; gap:10px; font-size:13px; color:var(--text-2); background:var(--bg-secondary); padding:10px 14px; border-radius:var(--radius-md); line-height:1.5; }
+.prereq-item code { font-family:'SF Mono','Fira Code',monospace; background:rgba(0,0,0,0.07); padding:1px 5px; border-radius:4px; font-size:12px; }
+.prereq-num { background:var(--text); color:var(--bg); border-radius:50%; width:18px; height:18px; min-width:18px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; margin-top:1px; }
+
+/* Scanning state */
+.agent-scanning { display:flex; flex-direction:column; align-items:center; gap:20px; padding:5rem 2rem; }
+.agent-spinner { width:28px; height:28px; border-width:3px; }
+.agent-scanning-msg { font-size:14px; color:var(--text-2); text-align:center; max-width:320px; }
+.agent-prog-wrap { width:100%; max-width:320px; height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+.agent-prog-bar { height:100%; background:var(--text); border-radius:2px; transition:width 0.4s ease; }
+
+/* Error state */
+.agent-error { display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; padding:5rem 2rem; }
+.agent-error-icon { font-size:2rem; }
+.agent-error-msg { font-size:12px; color:var(--text-2); max-width:400px; line-height:1.6; font-family:'SF Mono','Fira Code',monospace; background:var(--bg-secondary); padding:12px 16px; border-radius:var(--radius-md); text-align:left; white-space:pre-wrap; word-break:break-word; }
+
+/* All-good state */
+.agent-all-good { display:flex; flex-direction:column; align-items:center; text-align:center; gap:10px; padding:5rem 2rem; }
+.agent-all-good-icon { font-size:2.5rem; }
+.agent-all-good-title { font-size:16px; font-weight:500; }
+.agent-all-good-desc { font-size:13px; color:var(--text-2); }
+
+/* Results */
+.agent-results { display:flex; flex-direction:column; gap:12px; }
+.agent-summary-bar { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bg-secondary); border-radius:var(--radius-md); font-size:13px; flex-wrap:wrap; }
+.agent-summ-total { color:var(--text-2); }
+.agent-summ-upd   { color:var(--warning-text); font-weight:500; }
+.agent-summ-sec   { color:var(--danger-text);  font-weight:500; }
+
+.agent-warn-banner { font-size:12px; padding:10px 14px; background:var(--warning-bg); color:var(--warning-text); border:0.5px solid rgba(146,64,14,0.2); border-radius:var(--radius-md); }
+.agent-warn-banner code { font-family:'SF Mono','Fira Code',monospace; background:rgba(0,0,0,0.08); padding:1px 4px; border-radius:3px; }
+
+.agent-pkg-list { display:flex; flex-direction:column; gap:8px; }
+.agent-pkg-row { display:flex; gap:12px; padding:14px; background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg); align-items:flex-start; }
+.agent-pkg-row.is-sec { border-color:rgba(185,28,28,0.3); background:var(--danger-bg); }
+@media (prefers-color-scheme: dark) { .agent-pkg-row.is-sec { border-color:rgba(248,113,113,0.3); background:#2d0f0f; } }
+
+.agent-pkg-icon     { font-size:18px; flex-shrink:0; width:28px; text-align:center; margin-top:2px; }
+.agent-pkg-body     { flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; }
+.agent-pkg-name-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.agent-pkg-name     { font-size:13px; font-weight:500; }
+.agent-pkg-versions { display:flex; align-items:center; gap:4px; }
+.agent-pkg-summary  { font-size:12px; color:var(--text-2); line-height:1.5; margin:0; }
+.agent-pkg-meta     { font-size:12px; }
+.agent-ai-tag       { font-size:10px; padding:1px 5px; border-radius:4px; background:var(--info-bg); color:var(--info-text); font-weight:600; letter-spacing:0.3px; }
+.agent-idle-count   { font-size:13px; color:var(--text-2); background:var(--bg-secondary); padding:8px 16px; border-radius:var(--radius-md); }
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width:700px) {
   .app { padding:1rem; }
@@ -319,5 +416,4 @@ body { min-height: 100vh; }
   .catalog-search-row { flex-direction:column; align-items:stretch; }
   .catalog-search { min-width:0; }
   .plat-row { grid-template-columns:80px auto 1fr; }
-  .plat-cmd { display:none; }
 }
