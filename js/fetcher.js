@@ -179,16 +179,29 @@ const Fetcher = (() => {
   }
 
   // ── Fetch both platforms in parallel ────────────────────────────────────────
-  async function fetchBoth(catalogApp) {
+  async function fetchBoth(catalogApp, entry = null) {
+    // Resolve channel-specific brew/winget overrides when applicable
+    let effectiveApp = catalogApp;
+    if (entry?.channel && catalogApp.channels) {
+      const ch = catalogApp.channels.find(c => c.id === entry.channel);
+      if (ch) {
+        effectiveApp = {
+          ...catalogApp,
+          brew:   ch.brew   !== undefined ? ch.brew   : catalogApp.brew,
+          winget: ch.winget !== undefined ? ch.winget : catalogApp.winget,
+        };
+      }
+    }
+
     const [macResult, winResult] = await Promise.allSettled([
-      catalogApp.brew
-        ? (catalogApp.brewType === 'formula'
-            ? fetchBrewFormula(catalogApp.brew)
-            : fetchBrewCask(catalogApp.brew))
+      effectiveApp.brew
+        ? (effectiveApp.brewType === 'formula'
+            ? fetchBrewFormula(effectiveApp.brew)
+            : fetchBrewCask(effectiveApp.brew))
         : Promise.reject(new Error('No brew package')),
 
-      (catalogApp.winget || catalogApp.github)
-        ? fetchWindowsVersion(catalogApp)
+      (effectiveApp.winget || effectiveApp.github)
+        ? fetchWindowsVersion(effectiveApp)
         : Promise.reject(new Error('No Windows package')),
     ]);
 
@@ -207,7 +220,7 @@ const Fetcher = (() => {
     for (const entry of myApps) {
       const app = getCatalogApp(entry.id);
       if (!app) continue;
-      const result = await fetchBoth(app);
+      const result = await fetchBoth(app, entry);
       if (onProgress) onProgress(entry.id, result);
     }
   }

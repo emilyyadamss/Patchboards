@@ -68,22 +68,32 @@ const App = (() => {
   // ── Add / remove / version ────────────────────────────────────────────────────
 
   // Called by the version modal's confirm button (for both add and edit)
-  function confirmVersion(id, version, isEdit) {
+  function confirmVersion(id, version, isEdit, channel) {
     const v = version.trim() || null;
 
     if (isEdit) {
       Store.setCurrentVersion(id, v);
+      if (channel !== undefined) Store.setChannel(id, channel);
       render();
+      // Re-fetch if channel changed so the card reflects the new channel's releases
+      const app = getCatalogApp(id);
+      if (app && channel !== undefined) {
+        const entry = Store.getMyApps().find(a => a.id === id);
+        Fetcher.fetchBoth(app, entry)
+          .then(result => { Store.setRelease(id, result); render(); })
+          .catch(() => {});
+      }
       return;
     }
 
     // New app — add it then kick off an immediate version fetch
-    Store.addApp(id, v);
+    Store.addApp(id, v, channel || null);
     render();
 
     const app = getCatalogApp(id);
     if (app) {
-      Fetcher.fetchBoth(app)
+      const entry = Store.getMyApps().find(a => a.id === id);
+      Fetcher.fetchBoth(app, entry)
         .then(result => { Store.setRelease(id, result); render(); })
         .catch(() => {
           Store.setRelease(id, {

@@ -15,19 +15,28 @@ const Agent = (() => {
       const latestWin = release?.win?.version;
       const latest    = latestMac || latestWin || null;
 
-      let line = `${i + 1}. "${app.name}"`;
+      // Qualify the name when a non-default channel is active (e.g. Firefox ESR)
+      const channelLabel = entry.channel && app.channels
+        ? app.channels.find(c => c.id === entry.channel)?.label
+        : null;
+      const isNonDefault = channelLabel && app.channels && entry.channel !== app.channels[0].id;
+      const displayName  = isNonDefault ? `${app.name} ${channelLabel}` : app.name;
+
+      let line = `${i + 1}. "${displayName}"`;
       if (cv)     line += ` — deployed: ${cv}`;
       if (latest) line += `, latest available: ${latest}`;
+      if (isNonDefault) line += ` [${channelLabel} — separate versioning track from standard release]`;
       return line;
     }).join('\n');
 
     return `You are a software update security advisor.
 
-For each app below, use your knowledge to provide:
-- The latest stable version you know of (use the "latest available" figure if given — treat it as ground truth)
-- Whether there is a known CVE or security advisory between the deployed version and the latest
-- A one-sentence summary of the most notable change in the latest release
-- The official release notes or changelog URL (use the real, well-known URL for each project)
+For each app below:
+- IMPORTANT: if "latest available" is provided, copy it exactly into "latestVersion" — do not substitute your own version number
+- If "latest available" is NOT provided, use your knowledge to fill in the latest stable version
+- Determine whether there is a known CVE or security advisory between the deployed version and the latest
+- Write a one-sentence summary of the most notable change in the latest release
+- Provide the official release notes or changelog URL (use the real, well-known URL for each project)
 
 Apps to analyze:
 ${list}
@@ -158,15 +167,16 @@ const AgentUI = (() => {
 
     set(`
       <div class="agent-idle">
-        <div class="agent-idle-icon">🤖</div>
+        
         <div class="agent-idle-title">AI Agent Scan</div>
         <p class="agent-idle-desc">
           Uses Claude to look up the latest release for each app on your dashboard,
-          flag security advisories, and summarize what changed — no local install required.
+          flag security advisories, and summarize what changed. There are no local install required.
         </p>
         <div class="agent-idle-count">${desc}</div>
         <button class="btn primary agent-scan-btn" onclick="AgentUI.startScan()" ${!count ? 'disabled' : ''}>Scan Dashboard</button>
         <p class="agent-idle-note">Requires <code>ANTHROPIC_API_KEY</code> in <code>js/config.js</code></p>
+        <p class="agent-idle-note">AI analysis may be inaccurate or incomplete. Always verify with official sources before making decisions. Thank you!</p>
       </div>
     `);
   }
@@ -186,7 +196,7 @@ const AgentUI = (() => {
   function renderError(msg) {
     set(`
       <div class="agent-error">
-        <div class="agent-error-icon">⚠️</div>
+        <div class="agent-error-icon"></div>
         <pre class="agent-error-msg">${msg}</pre>
         <button class="btn" onclick="AgentUI.renderIdle()" style="margin-top:1rem">← Back</button>
       </div>
@@ -197,7 +207,7 @@ const AgentUI = (() => {
     if (empty) {
       set(`
         <div class="agent-all-good">
-          <div class="agent-all-good-icon">📋</div>
+          <div class="agent-all-good-icon"></div>
           <div class="agent-all-good-title">No apps on your dashboard</div>
           <p class="agent-all-good-desc">Add apps via Browse Software, then run the agent scan.</p>
           <button class="btn" onclick="AgentUI.renderIdle()" style="margin-top:1rem">← Back</button>
@@ -221,10 +231,12 @@ const AgentUI = (() => {
       return as - bs;
     });
 
-    const rows = sorted.map(({ app, entry, ai }) => {
+    const rows = sorted.map(({ app, entry, release, ai }) => {
       const cv     = entry.currentVersion;
       const isSec  = !!ai?.isSecurity;
-      const latest = ai?.latestVersion || null;
+      // Prefer the fetcher's live data; fall back to Claude's answer only if unavailable
+      const fetchedLatest = release?.mac?.version || release?.win?.version || null;
+      const latest = fetchedLatest || ai?.latestVersion || null;
 
       const badge = isSec
         ? `<span class="badge b-sec">security</span>`
@@ -258,7 +270,6 @@ const AgentUI = (() => {
 
       return `
         <div class="agent-pkg-row ${isSec ? 'is-sec' : ''}">
-          <div class="agent-pkg-icon">${app.icon}</div>
           <div class="agent-pkg-body">
             <div class="agent-pkg-name-row">
               <span class="agent-pkg-name">${app.name}</span>
