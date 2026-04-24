@@ -4,9 +4,18 @@
 
 const Scanner = (() => {
 
-  function buildPrompt(name, version, latest) {
+  function buildPrompt(name, version, latest, channelLabel) {
     const hasUpdate = latest && latest !== version;
-    return `You are a software security researcher. For the software "${name}" (installed: ${version}${hasUpdate ? `, available: ${latest}` : ''}):
+    // Qualify the display name with the channel when it differs from the default release
+    // e.g. "Mozilla Firefox" + "ESR (Extended Support Release)" → "Mozilla Firefox ESR (Extended Support Release)"
+    const isNonDefaultChannel = channelLabel && !/^standard|^release$/i.test(channelLabel);
+    const displayName = isNonDefaultChannel ? `${name} ${channelLabel}` : name;
+
+    const channelNote = isNonDefaultChannel
+      ? `\nIMPORTANT: This is the "${channelLabel}" channel, which follows its own versioning track separate from the standard release. Only consider CVEs and advisories that apply specifically to this channel and version — do not conflate with the standard release version numbers.`
+      : '';
+
+    return `You are a software security researcher. For the software "${displayName}" (installed: ${version}${hasUpdate ? `, available: ${latest}` : ''}):${channelNote}
 
 1. Is there a known CVE or security vulnerability in version ${version}?
 2. If an update to ${latest || 'a newer version'} is available, does it patch any security issues?
@@ -25,7 +34,7 @@ Rules:
 - "sourceUrl" should be an official advisory, GitHub security release, or NVD link`;
   }
 
-  async function checkPackage(name, version, latest) {
+  async function checkPackage(name, version, latest, channelLabel = null) {
     const apiKey = CONFIG.ANTHROPIC_API_KEY;
     if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
       throw new Error('No API key set in js/config.js');
@@ -43,7 +52,7 @@ Rules:
         model: CONFIG.MODEL,
         max_tokens: CONFIG.MAX_TOKENS,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: buildPrompt(name, version, latest) }],
+        messages: [{ role: 'user', content: buildPrompt(name, version, latest, channelLabel) }],
       }),
     });
 

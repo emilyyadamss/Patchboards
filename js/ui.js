@@ -89,6 +89,14 @@ const UI = (() => {
       badgeHtml = `<span class="badge b-ok">up to date</span>`;
     }
 
+    // Show channel badge when a non-default channel is active
+    const channelBadge = (() => {
+      if (!app.channels || !entry.channel) return '';
+      const ch = app.channels.find(c => c.id === entry.channel);
+      if (!ch || ch.id === app.channels[0].id) return '';
+      return `<span class="badge b-channel">${ch.label}</span>`;
+    })();
+
     const cv = entry.currentVersion;
     const versionLabel = cv
       ? `Your version: <strong>${cv}</strong>`
@@ -105,6 +113,7 @@ const UI = (() => {
             <div class="app-card-name-row">
               <span class="app-card-name">${app.name}</span>
               ${badgeHtml}
+              ${channelBadge}
             </div>
             <div class="app-card-category">${app.category}</div>
           </div>
@@ -180,6 +189,18 @@ const UI = (() => {
     input.value = existing;
     input.placeholder = getVersionPlaceholder(app);
 
+    // Channel selector — only shown for apps that define multiple channels
+    const channelRow = document.getElementById('versionModalChannelRow');
+    const channelSel  = document.getElementById('versionModalChannel');
+    if (app.channels && app.channels.length > 1) {
+      channelSel.innerHTML = app.channels
+        .map(ch => `<option value="${ch.id}">${ch.label}</option>`).join('');
+      channelSel.value = entry?.channel || app.channels[0].id;
+      channelRow.style.display = 'flex';
+    } else {
+      channelRow.style.display = 'none';
+    }
+
     document.getElementById('versionModal').style.display = 'flex';
     input.focus();
     input.select();
@@ -211,7 +232,11 @@ const UI = (() => {
   function confirmVersionModal() {
     if (!_modalAppId) return;
     const version = document.getElementById('versionModalInput').value.trim();
-    App.confirmVersion(_modalAppId, version, _modalIsEdit);
+    const channelRow = document.getElementById('versionModalChannelRow');
+    const channel = channelRow.style.display !== 'none'
+      ? document.getElementById('versionModalChannel').value
+      : undefined;
+    App.confirmVersion(_modalAppId, version, _modalIsEdit, channel);
     closeVersionModal();
   }
 
@@ -289,10 +314,156 @@ const UI = (() => {
           </div>
           ${tracked
             ? `<button class="btn catalog-track-btn tracked" onclick="App.removeApp('${app.id}'); UI.renderCatalog(); App.render();">Tracked</button>`
-            : `<button class="btn catalog-track-btn primary"  onclick="UI.openVersionModal('${app.id}', false)">+ Track</button>`
+            : `<button class="btn catalog-track-btn primary"  onclick="UI.openVersionModal('${app.id}', false)">Track</button>`
           }
         </div>`;
     }).join('');
+  }
+
+  // ── Verify Releases panel ────────────────────────────────────────────────
+  function openVerifyPanel() {
+    const searchEl = document.getElementById('verifySearch');
+    if (searchEl) searchEl.value = '';
+    renderVerifyPanel();
+    document.getElementById('verifyOverlay').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    if (searchEl) searchEl.focus();
+  }
+
+  function closeVerifyPanel() {
+    document.getElementById('verifyOverlay').style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  function closeVerifyPanelOnBg(e) {
+    if (e.target === document.getElementById('verifyOverlay')) closeVerifyPanel();
+  }
+
+  function resolveChannelApp(app, entry) {
+    if (!entry?.channel || !app.channels) return app;
+    const ch = app.channels.find(c => c.id === entry.channel);
+    if (!ch) return app;
+    return {
+      ...app,
+      brew:   ch.brew   !== undefined ? ch.brew   : app.brew,
+      winget: ch.winget !== undefined ? ch.winget : app.winget,
+    };
+  }
+
+  function buildVerifyLinks(app, entry) {
+    const effective = resolveChannelApp(app, entry);
+    const links = [];
+    if (app.github) {
+      links.push({ label: 'GitHub Releases', sub: `github.com/${app.github}`, href: `https://github.com/${app.github}/releases` });
+    }
+    if (effective.brew) {
+      const type = effective.brewType === 'formula' ? 'formula' : 'cask';
+      links.push({ label: 'Homebrew', sub: effective.brew, href: `https://formulae.brew.sh/${type}/${effective.brew}` });
+    }
+    if (effective.winget) {
+      const parts = effective.winget.split('.');
+      if (parts.length >= 2) {
+        const [pub, ...rest] = parts;
+        links.push({ label: 'Winget', sub: effective.winget, href: `https://winget.run/pkg/${pub}/${rest.join('.')}` });
+      }
+    }
+    if (app.homepage) {
+      let hostname = app.homepage;
+      try { hostname = new URL(app.homepage).hostname; } catch {}
+      links.push({ label: 'Official Site', sub: hostname, href: app.homepage });
+    }
+    return links;
+  }
+
+  function verifyAppCard(entry, app, release) {
+    const macNew = Store.isNewRelease(entry, release, 'mac');
+    const winNew = Store.isNewRelease(entry, release, 'win');
+    const cv = entry.currentVersion;
+
+    const platformRows = [];
+    if (app.brew && release?.mac && !release.mac.error && release.mac.version) {
+      const vHtml = macNew && cv
+        ? `<span class="vpill v-cur">${cv}</span><span class="v-arr">→</span><span class="vpill v-upd">${release.mac.version}</span>`
+        : `<span class="vpill v-ok">${release.mac.version}</span>`;
+      const srcLink = release.mac.sourceUrl
+        ? `<a href="${release.mac.sourceUrl}" target="_blank" rel="noopener" class="verify-src-link">release notes ↗</a>`
+        : '';
+      platformRows.push(`<div class="verify-plat-row ${macNew ? 'has-update' : ''}"><span class="plat-label">Mac</span><span class="plat-version">${vHtml}</span>${srcLink}</div>`);
+    }
+    if (app.winget && release?.win && !release.win.error && release.win.version) {
+      const vHtml = winNew && cv
+        ? `<span class="vpill v-cur">${cv}</span><span class="v-arr">→</span><span class="vpill v-upd">${release.win.version}</span>`
+        : `<span class="vpill v-ok">${release.win.version}</span>`;
+      const srcLink = release.win.sourceUrl
+        ? `<a href="${release.win.sourceUrl}" target="_blank" rel="noopener" class="verify-src-link">release notes ↗</a>`
+        : '';
+      platformRows.push(`<div class="verify-plat-row ${winNew ? 'has-update' : ''}"><span class="plat-label">Win</span><span class="plat-version">${vHtml}</span>${srcLink}</div>`);
+    }
+
+    const links = buildVerifyLinks(app, entry);
+    const linksHtml = links.map(l =>
+      `<a href="${l.href}" target="_blank" rel="noopener" class="verify-link">
+        <span class="verify-link-label">${l.label}</span>
+        <span class="verify-link-sub">${l.sub}</span>
+      </a>`
+    ).join('');
+
+    return `
+      <div class="verify-app-card">
+        <div class="verify-app-header">
+          <div class="app-card-icon">${app.name.charAt(0)}</div>
+          <div class="verify-app-meta">
+            <div class="verify-app-name">${app.name}</div>
+            <div class="app-card-category">${app.category}</div>
+          </div>
+        </div>
+        ${platformRows.length ? `<div class="verify-plat-rows">${platformRows.join('')}</div>` : ''}
+        ${linksHtml ? `<div class="verify-links-section"><div class="verify-links-label">Official sources</div><div class="verify-links">${linksHtml}</div></div>` : ''}
+      </div>`;
+  }
+
+  function renderVerifyPanel() {
+    const myApps = Store.getMyApps();
+    const content = document.getElementById('verifyContent');
+    const query = (document.getElementById('verifySearch')?.value || '').toLowerCase().trim();
+
+    const appsWithUpdates = myApps.filter(entry => {
+      const release = Store.getRelease(entry.id);
+      return Store.isNewRelease(entry, release, 'mac') || Store.isNewRelease(entry, release, 'win');
+    });
+
+    if (!appsWithUpdates.length) {
+      content.innerHTML = `
+        <div class="verify-empty">
+          <div class="verify-empty-title">All apps up to date</div>
+          <div class="verify-empty-desc">No new releases detected. When updates are available, official source links will appear here for manual verification.</div>
+        </div>`;
+      return;
+    }
+
+    const filtered = query
+      ? appsWithUpdates.filter(entry => {
+          const app = getCatalogApp(entry.id);
+          return app && (app.name.toLowerCase().includes(query) || app.category.toLowerCase().includes(query));
+        })
+      : appsWithUpdates;
+
+    if (!filtered.length) {
+      content.innerHTML = `
+        <div class="verify-empty">
+          <div class="verify-empty-title">No matching apps</div>
+          <div class="verify-empty-desc">No apps with updates match your search.</div>
+        </div>`;
+      return;
+    }
+
+    content.innerHTML = `<div class="verify-list">${
+      filtered.map(entry => {
+        const app = getCatalogApp(entry.id);
+        const release = Store.getRelease(entry.id);
+        return app ? verifyAppCard(entry, app, release) : '';
+      }).join('')
+    }</div>`;
   }
 
   // ── Status bar helpers ───────────────────────────────────────────────────────
@@ -316,6 +487,7 @@ const UI = (() => {
     setPlatformFilter, setCategoryFilter,
     openVersionModal, closeVersionModal, closeVersionModalOnBg,
     confirmVersionModal, versionModalKeydown,
+    openVerifyPanel, closeVerifyPanel, closeVerifyPanelOnBg,
     setScanStatus, setProgress, setSpinner, setRefreshBtn, showBanner,
   };
 })();

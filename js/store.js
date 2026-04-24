@@ -23,9 +23,9 @@ const Store = (() => {
     try { localStorage.setItem(MY_APPS_KEY, JSON.stringify(myApps)); } catch {}
   }
 
-  function addApp(id, currentVersion = null) {
+  function addApp(id, currentVersion = null, channel = null) {
     if (myApps.find(a => a.id === id)) return;
-    myApps.push({ id, addedAt: Date.now(), currentVersion: currentVersion || null });
+    myApps.push({ id, addedAt: Date.now(), currentVersion: currentVersion || null, channel: channel || null });
     saveMyApps();
   }
 
@@ -41,6 +41,11 @@ const Store = (() => {
   function setCurrentVersion(id, version) {
     const e = myApps.find(a => a.id === id);
     if (e) { e.currentVersion = version || null; saveMyApps(); }
+  }
+
+  function setChannel(id, channel) {
+    const e = myApps.find(a => a.id === id);
+    if (e) { e.channel = channel || null; saveMyApps(); }
   }
 
   // ── Release cache ────────────────────────────────────────────────────────────
@@ -99,7 +104,7 @@ const Store = (() => {
 
   return {
     load,
-    addApp, removeApp, isTracked, getMyApps, setCurrentVersion,
+    addApp, removeApp, isTracked, getMyApps, setCurrentVersion, setChannel,
     setRelease, getRelease, getDashboardStats, isNewRelease,
   };
 })();

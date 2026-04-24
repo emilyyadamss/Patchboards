@@ -22,6 +22,7 @@
       <div class="topbar-actions">
         <button id="refreshBtn" class="btn" onclick="App.fetchReleases()">Refresh</button>
         <button class="btn" onclick="AgentUI.openPanel()">Agent Scan</button>
+        <button class="btn" onclick="UI.openVerifyPanel()">Verify Releases</button>
         <button class="btn primary" onclick="UI.openCatalog()">Browse Software</button>
       </div>
     </header>
@@ -60,6 +61,10 @@
       <div class="modal-app-row">
         <span class="modal-app-name" id="versionModalName"></span>
       </div>
+      <div id="versionModalChannelRow" class="modal-channel-row" style="display:none">
+        <label class="modal-channel-label" for="versionModalChannel">Release channel</label>
+        <select id="versionModalChannel" class="modal-channel-select"></select>
+      </div>
       <p class="modal-desc">What version does your organization currently have deployed?</p>
       <input
         type="text"
@@ -84,7 +89,7 @@
           <h2 class="catalog-title">Software Catalog</h2>
           <p class="catalog-subtitle">Add apps to track Mac and Windows releases side-by-side</p>
         </div>
-        <button class="btn catalog-close" onclick="UI.closeCatalog()">✕ Close</button>
+        <button class="btn catalog-close" onclick="UI.closeCatalog()" aria-label="Close">&#x2715;</button>
       </div>
       <div class="catalog-search-row">
         <input type="text" id="catalogSearch" class="catalog-search" placeholder="Search software…" oninput="UI.renderCatalog()">
@@ -107,10 +112,34 @@
           <h2 class="catalog-title">AI Agent Scan</h2>
           <p class="catalog-subtitle">AI-powered release scan for your dashboard apps</p>
         </div>
-        <button class="btn catalog-close" onclick="AgentUI.closePanel()">✕ Close</button>
+        <button class="btn catalog-close" onclick="AgentUI.closePanel()" aria-label="Close">&#x2715;</button>
       </div>
       <div id="agentContent" class="agent-content"></div>
     </div>
+  </div>
+
+  <!-- Verify Releases panel -->
+  <div id="verifyOverlay" class="catalog-overlay" style="display:none" onclick="UI.closeVerifyPanelOnBg(event)">
+    <div class="catalog-panel">
+      <div class="catalog-header">
+        <div>
+          <h2 class="catalog-title">Verify Releases</h2>
+          <p class="catalog-subtitle">Official source links to cross-check AI scan results</p>
+        </div>
+        <button class="btn catalog-close" onclick="UI.closeVerifyPanel()" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="catalog-search-row">
+        <input type="text" id="verifySearch" class="catalog-search" placeholder="Search apps…" oninput="UI.renderVerifyPanel()">
+      </div>
+      <div id="verifyContent" class="verify-content"></div>
+    </div>
+  </div>
+
+  <!-- Beta notice -->
+  <div id="betaBanner" class="beta-banner">
+    <button class="beta-close" onclick="document.getElementById('betaBanner').style.display='none'" aria-label="Dismiss">&#x2715;</button>
+    <span class="beta-badge">BETA</span>
+    <span class="beta-text">This project is a beta version and is still a work in progress. Some features may be incomplete or change.</span>
   </div>
 
   <script src="js/config.js"></script>
