@@ -22,6 +22,8 @@ if %errorlevel% == 0 (
 
 :: Fall back to common Anaconda locations
 for %%P in (
+  "%USERPROFILE%\.conda\python.exe"
+  "%USERPROFILE%\.conda\envs\base\python.exe"
   "%USERPROFILE%\anaconda3\python.exe"
   "%USERPROFILE%\Anaconda3\python.exe"
   "%LOCALAPPDATA%\anaconda3\python.exe"
