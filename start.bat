@@ -39,8 +39,24 @@ for %%P in (
   )
 )
 
-echo   Python not found. Install from https://python.org or ensure
-echo   Anaconda is added to your PATH.
+:: Try conda run as a last resort
+where conda >nul 2>&1
+if %errorlevel% == 0 (
+  echo   Using conda run...
+  echo   Server starting at http://localhost:4242
+  echo   Press Ctrl+C to stop.
+  echo.
+  start "" "http://localhost:4242"
+  conda run python "%SCRIPT_DIR%server\server.py"
+  echo.
+  echo   Server stopped.
+  pause
+  exit /b 0
+)
+
+echo   Python not found. Open Anaconda Prompt and run:
+echo     python server\server.py
+echo   Then open http://localhost:4242 in your browser.
 pause
 exit /b 1
 
