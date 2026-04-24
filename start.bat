@@ -21,11 +21,13 @@ if %errorlevel% == 0 (
   )
 )
 
-start "PatchBoards Server" %PYTHON% "%SCRIPT_DIR%server\server.py"
-timeout /t 1 /nobreak >nul
-start "" "http://localhost:4242"
-
-echo   Dashboard opened at http://localhost:4242
-echo   Close the "PatchBoards Server" window to stop the server.
+echo   Server starting at http://localhost:4242
+echo   Press Ctrl+C to stop.
 echo.
+
+start "" "http://localhost:4242"
+%PYTHON% "%SCRIPT_DIR%server\server.py"
+
+echo.
+echo   Server stopped.
 pause
