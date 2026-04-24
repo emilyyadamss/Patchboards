@@ -1,11 +1,11 @@
-// PatchBoards · fetcher.js
-// Fetches latest release versions for catalog apps — no local agent required.
+// PatchBoards fetcher.js
+// Fetches latest release versions for catalog apps. No local agent required.
 //
-// Mac  → Homebrew public API   (no auth needed)
+// Mac for Homebrew public API   (no auth needed)
 //         https://formulae.brew.sh/api/cask/{name}.json
 //         https://formulae.brew.sh/api/formula/{name}.json
 //
-// Win  → Priority chain per app:
+// Win for Priority chain per app:
 //   1. GitHub Releases API  (apps with catalog.github field)
 //         https://api.github.com/repos/{owner}/{repo}/releases/latest
 //   2. winget.run public API  (apps with catalog.winget field, no auth)

@@ -32,7 +32,7 @@ const Agent = (() => {
     return `You are a software update security advisor.
 
 For each app below:
-- IMPORTANT: if "latest available" is provided, copy it exactly into "latestVersion" — do not substitute your own version number
+- IMPORTANT: if "latest available" is provided, copy it exactly into "latestVersion". Do not substitute your own version number
 - If "latest available" is NOT provided, use your knowledge to fill in the latest stable version
 - Determine whether there is a known CVE or security advisory between the deployed version and the latest
 - Write a one-sentence summary of the most notable change in the latest release
@@ -163,7 +163,7 @@ const AgentUI = (() => {
     const count = Store.getMyApps().length;
     const desc  = count
       ? `${count} app${count !== 1 ? 's' : ''} on your dashboard`
-      : 'No apps on your dashboard yet — add some via Browse Software first.';
+      : 'No apps on your dashboard yet. Add some via Browse Software first.';
 
     set(`
       <div class="agent-idle">

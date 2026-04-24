@@ -1,5 +1,5 @@
-// PatchBoards · catalog.js
-// Curated software catalog — Mac (Homebrew) and Windows (winget).
+// PatchBoards catalog.js
+// Curated software catalog. Mac (Homebrew) and Windows (winget).
 // brew: cask name for homebrew-cask, brewFormula: name for homebrew formula
 // winget: winget package ID
 // github: "owner/repo" for apps that publish official GitHub Releases

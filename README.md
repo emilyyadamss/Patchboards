@@ -1,31 +1,39 @@
-<<<<<<< HEAD
 # PatchBoards
 
-> Real-time software patch tracker powered by Homebrew, winget, and AI-driven CVE detection.
+> Browser-based software release tracker powered by GitHub, winget, Homebrew, and AI-driven CVE detection.
 
 ---
 
 ## How it works
 
 ```
-Your machine                           Browser
-─────────────────────────────────────────────────────
-brew list --versions   ┐
-brew outdated --json   ├──► server.py ──► dashboard
-winget list            ┘   (localhost:4242)
+Catalog (catalog.js)
+  └── You add apps + enter your deployed version
+        │
+        ▼
+  Fetcher checks public APIs for latest release:
+    • GitHub Releases API       (open-source apps)
+    • winget.run API            (Windows packages)
+    • Homebrew formulae API     (Mac packages)
+        │
+        ▼
+  Dashboard shows what's out of date
 ```
 
-1. `start.sh` launches a tiny local Python server that queries Homebrew (and winget on Windows) directly
-2. The dashboard fetches your real installed packages from that server
-3. Optionally, the AI CVE scanner (Anthropic API + web search) checks each outdated package for known security vulnerabilities
+1. You add apps from the built-in catalog and enter the version you currently have deployed
+2. PatchBoards fetches the latest available release from public package APIs
+3. The dashboard compares your deployed version against the latest and flags anything out of date
+4. Optionally, the AI CVE scanner (Anthropic API) checks outdated packages for known security vulnerabilities
+
+No local agent or server required — runs entirely in the browser.
 
 ---
 
 ## Requirements
 
-- macOS with [Homebrew](https://brew.sh) installed
-- Python 3 (comes with macOS)
+- A modern browser
 - An [Anthropic API key](https://console.anthropic.com/) *(only needed for CVE scanning)*
+- A [GitHub personal access token](https://github.com/settings/tokens/new) *(optional — raises API rate limit from 60 to 5,000 req/hr)*
 
 ---
 
@@ -42,28 +50,20 @@ cd Patchboards
 
 ```bash
 cp js/config.example.js js/config.js
-# Edit js/config.js and paste your key
+# Edit js/config.js and paste your Anthropic key (and optionally your GitHub token)
 ```
 
-### 3. Start the app
+### 3. Open the dashboard
 
 ```bash
-chmod +x start.sh
-./start.sh
-```
-
-This starts the local server and opens the dashboard in your browser automatically.
-
----
-
-## Manual start (if start.sh doesn't work)
-
-```bash
-# Terminal 1 — start the server
-python3 server/server.py
-
-# Terminal 2 — open the dashboard
 open index.html
+```
+
+Or serve it locally if your browser blocks file:// fetch requests:
+
+```bash
+python3 -m http.server 4242
+# then open http://localhost:4242
 ```
 
 ---
@@ -73,16 +73,16 @@ open index.html
 ```
 Patchboards/
 ├── index.html              # Dashboard UI
-├── start.sh                # One-command launcher
-├── server/
-│   └── server.py           # Local server (queries brew + winget)
 ├── css/
 │   └── style.css
 ├── js/
-│   ├── config.js           # ← Your API key goes here (gitignored)
+│   ├── config.js           # ← Your API keys go here (gitignored)
 │   ├── config.example.js   # Safe-to-commit placeholder
-│   ├── store.js            # Package state + localStorage
+│   ├── catalog.js          # App definitions (brew/winget/github IDs)
+│   ├── store.js            # Tracked apps + deployed versions (localStorage)
+│   ├── fetcher.js          # Fetches latest releases from public APIs
 │   ├── scanner.js          # AI CVE checker (Anthropic API)
+│   ├── agent.js            # AI agent logic
 │   ├── ui.js               # Rendering
 │   └── app.js              # Main controller
 └── README.md
@@ -94,18 +94,18 @@ Patchboards/
 
 | Feature | How |
 |---|---|
-| Real installed packages | `brew list --versions` + `brew list --cask --versions` |
-| Outdated detection | `brew outdated --json=v2` |
-| Security flagging | `brew audit` + AI CVE scan |
-| CVE details | Anthropic API with web search |
-| Update commands | Shown inline on each package row |
-| Offline fallback | Last scan cached in `localStorage` |
+| Release tracking | Fetches latest versions from GitHub Releases, winget.run, and Homebrew APIs |
+| Outdated detection | Compares latest available release against your manually entered deployed version |
+| Multi-platform | Mac (Homebrew casks + formulae) and Windows (winget) side by side |
+| CVE scanning | Anthropic API checks outdated packages for known vulnerabilities |
+| Offline fallback | Last fetch cached in `localStorage` |
+| Channel support | Track stable vs. beta channels per app |
 
 ---
 
 ## API key safety
 
-`js/config.js` is in `.gitignore` — your key will never be committed. Only `js/config.example.js` (with a placeholder) is tracked by git.
+`js/config.js` is in `.gitignore` — your keys will never be committed. Only `js/config.example.js` (with placeholders) is tracked by git.
 
 ---
 
@@ -115,7 +115,3 @@ Patchboards/
 - [ ] Desktop notifications for new CVEs
 - [ ] Export patch report (PDF/CSV)
 - [ ] `apt` support on Linux
-- [ ] Auto-detect and suggest `brew upgrade` commands
-=======
-# Patchboards
->>>>>>> dbd25da9a9548a42acbbb5467488bfb218ef495f

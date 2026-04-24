@@ -86,7 +86,7 @@ const App = (() => {
       return;
     }
 
-    // New app — add it then kick off an immediate version fetch
+    // New app. Add it then kick off an immediate version fetch
     Store.addApp(id, v, channel || null);
     render();
 
