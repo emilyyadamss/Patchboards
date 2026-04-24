@@ -6,12 +6,15 @@ then serves the data to the dashboard on http://localhost:4242
 """
 
 import json
+import mimetypes
+import os
 import re
 import subprocess
 import sys
-import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PORT = 4242
 
@@ -293,6 +296,18 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"  {self.address_string()} {fmt % args}")
 
+    def _serve_file(self, path, content_type="text/plain"):
+        try:
+            with open(path, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", len(body))
+            self.end_headers()
+            self.wfile.write(body)
+        except FileNotFoundError:
+            self.send_json({"error": "Not found"}, 404)
+
     def send_json(self, data, status=200):
         body = json.dumps(data).encode()
         self.send_response(status)
@@ -314,9 +329,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
+        path = parsed.path
+
+        # Static files — serve index.html, css/, js/ from the project root
+        if path in ("", "/", "/index.html"):
+            self._serve_file(os.path.join(BASE_DIR, "index.html"), "text/html; charset=utf-8")
+            return
+
+        if path.startswith("/css/") or path.startswith("/js/"):
+            rel = path.lstrip("/").replace("/", os.sep)
+            abs_path = os.path.normpath(os.path.join(BASE_DIR, rel))
+            # Block path traversal
+            if not abs_path.startswith(os.path.normpath(BASE_DIR)):
+                self.send_json({"error": "Forbidden"}, 403)
+                return
+            # Fall back to config.example.js when config.js is absent
+            if rel == os.path.join("js", "config.js") and not os.path.exists(abs_path):
+                abs_path = os.path.join(BASE_DIR, "js", "config.example.js")
+            mime = mimetypes.guess_type(abs_path)[0] or "text/plain"
+            self._serve_file(abs_path, mime)
+            return
 
         # GET /packages — full merged list (installed packages)
-        if parsed.path == "/packages":
+        if path == "/packages":
             try:
                 brew = get_homebrew_packages()
                 winget = get_winget_packages()
@@ -328,7 +363,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"packages": [], "error": str(e)}, 500)
 
         # GET /winget-version?package=<id> — latest available version for a winget package
-        elif parsed.path == "/winget-version":
+        elif path == "/winget-version":
             package_id = params.get("package", [None])[0]
             if not package_id:
                 self.send_json({"error": "Missing package parameter"}, 400)
@@ -347,8 +382,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"version": None, "error": f"Could not find version for {package_id}"})
 
         # GET /health — sanity check
-        elif parsed.path == "/health":
-            brew_ok = subprocess.run(["which", "brew"], capture_output=True).returncode == 0
+        elif path == "/health":
+            which = "where" if sys.platform == "win32" else "which"
+            brew_ok = subprocess.run([which, "brew"], capture_output=True).returncode == 0
             self.send_json({
                 "status": "ok",
                 "homebrew": brew_ok,
@@ -367,7 +403,8 @@ if __name__ == "__main__":
     print(f"  Listening on http://localhost:{PORT}")
     print(f"  Press Ctrl+C to stop\n")
 
-    brew_ok = subprocess.run(["which", "brew"], capture_output=True).returncode == 0
+    which = "where" if sys.platform == "win32" else "which"
+    brew_ok = subprocess.run([which, "brew"], capture_output=True).returncode == 0
     if not brew_ok:
         print("  ⚠️  Homebrew not found — install it from https://brew.sh")
     else:

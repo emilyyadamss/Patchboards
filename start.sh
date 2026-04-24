@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER="$SCRIPT_DIR/server/server.py"
-INDEX="$SCRIPT_DIR/index.html"
+URL="http://localhost:4242"
 
 # Check Python 3
 if ! command -v python3 &>/dev/null; then
@@ -32,15 +32,17 @@ SERVER_PID=$!
 sleep 1
 
 # Open the dashboard
-if command -v open &>/dev/null; then
-  open "$INDEX"
+if [[ "$OSTYPE" == "darwin"* ]] || command -v open &>/dev/null; then
+  open "$URL"
 elif command -v xdg-open &>/dev/null; then
-  xdg-open "$INDEX"
+  xdg-open "$URL"
+elif [[ "$OS" == "Windows_NT" ]]; then
+  cmd.exe /c start "" "$URL"
 else
-  echo "  Open this file in your browser: $INDEX"
+  echo "  Open $URL in your browser"
 fi
 
-echo "  Dashboard opened. Server PID: $SERVER_PID"
+echo "  Dashboard opened at $URL  (Server PID: $SERVER_PID)"
 echo "  Press Ctrl+C to stop the server."
 echo ""
 
