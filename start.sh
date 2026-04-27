@@ -4,6 +4,13 @@
 
 set -e
 
+# ── Proxy settings (optional) ─────────────────────────
+# Only needed if running through a proxy. Leave blank if not.
+# export HTTP_PROXY="http://your-proxy:port"
+# export HTTPS_PROXY="http://your-proxy:port"
+# export NO_PROXY="localhost,127.0.0.1,::1"
+# ──────────────────────────────────────────────────────
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER="$SCRIPT_DIR/server/server.py"
 URL="http://localhost:4242"
