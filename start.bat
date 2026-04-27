@@ -1,6 +1,14 @@
 @echo off
 setlocal
 
+:: ── Proxy settings (optional) ──────────────────────────
+:: Only needed if running through a proxy. Leave blank if not.
+:: set HTTP_PROXY=http://your-proxy:port
+:: set HTTPS_PROXY=http://your-proxy:port
+:: set NO_PROXY=localhost,127.0.0.1,::1
+:: ────────────────────────────────────────────────────────
+
+
 set "SCRIPT_DIR=%~dp0"
 
 echo.
