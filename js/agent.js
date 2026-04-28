@@ -217,7 +217,7 @@ const AgentUI = (() => {
     }
 
     const apiBanner = noApiKey
-      ? `<div class="agent-warn-banner">No Anthropic API key — add <code>ANTHROPIC_API_KEY</code> to <code>js/config.js</code> to enable AI analysis.</div>`
+      ? `<div class="agent-warn-banner">No Anthropic API key. Add <code>ANTHROPIC_API_KEY</code> to <code>js/config.js</code> to enable AI analysis.</div>`
       : aiError
       ? `<div class="agent-warn-banner">AI scan failed: ${aiError}</div>`
       : '';

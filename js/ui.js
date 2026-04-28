@@ -184,7 +184,7 @@ const UI = (() => {
       manualCheckHtml = `
         <div class="app-card-manual-check${isOverdue ? ' manual-check-overdue' : ''}">
           <div class="manual-check-info">
-            <span class="manual-check-label">Version unavailable — check release page monthly</span>
+            <span class="manual-check-label">Version unavailable. Check release page monthly</span>
             <span class="manual-check-status">${statusText}</span>
           </div>
           <button class="btn btn-sm" onclick="UI.markManualCheck('${app.id}')">Mark Checked</button>
