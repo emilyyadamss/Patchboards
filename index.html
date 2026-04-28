@@ -136,11 +136,22 @@
   </div>
 
   <!-- Beta notice -->
-  <div id="betaBanner" class="beta-banner">
-    <button class="beta-close" onclick="document.getElementById('betaBanner').style.display='none'" aria-label="Dismiss">&#x2715;</button>
+  <div id="betaBanner" class="beta-banner" style="display:none">
+    <button class="beta-close" onclick="dismissBetaBanner()" aria-label="Dismiss">&#x2715;</button>
     <span class="beta-badge">BETA</span>
     <span class="beta-text">This project is a beta version and is still a work in progress. Some features may be incomplete or change.</span>
   </div>
+  <script>
+    (function () {
+      if (!localStorage.getItem('betaBannerDismissed')) {
+        document.getElementById('betaBanner').style.display = '';
+      }
+    })();
+    function dismissBetaBanner() {
+      localStorage.setItem('betaBannerDismissed', '1');
+      document.getElementById('betaBanner').style.display = 'none';
+    }
+  </script>
 
   <script src="js/config.js"></script>
   <script src="js/catalog.js"></script>
