@@ -9,6 +9,18 @@ let _modalIsEdit  = false;
 
 const UI = (() => {
 
+  function timeAgo(ts) {
+    if (!ts) return null;
+    const days = Math.floor((Date.now() - ts) / 86400000);
+    if (days === 0) return 'today';
+    if (days === 1) return '1 day ago';
+    if (days < 14)  return `${days} days ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 9)  return `${weeks} week${weeks !== 1 ? 's' : ''} ago`;
+    const months = Math.floor(days / 30);
+    return `${months} month${months !== 1 ? 's' : ''} ago`;
+  }
+
   // ── Stats bar ────────────────────────────────────────────────────────────────
   function renderStats() {
     const s = Store.getDashboardStats();
@@ -73,6 +85,13 @@ const UI = (() => {
     const winNew = Store.isNewRelease(entry, release, 'win');
     const anyNew = macNew || winNew;
 
+    // An app is "stale-unavailable" when no platform returned a version AND
+    // it has been more than 14 days since it was added or last manually checked.
+    const hasNoAutoVersion = release !== null && !release.mac?.version && !release.win?.version;
+    const lastManualCheck  = Store.getManualCheck(app.id);
+    const baselineTime     = lastManualCheck || entry.addedAt || 0;
+    const showAsUnavailable = hasNoAutoVersion && (Date.now() - baselineTime) > 14 * 24 * 60 * 60 * 1000;
+
     let badgeHtml;
     if (!release) {
       badgeHtml = `<span class="badge b-loading">checking…</span>`;
@@ -80,6 +99,8 @@ const UI = (() => {
       badgeHtml = `<span class="badge b-default">no version set</span>`;
     } else if (anyNew) {
       badgeHtml = `<span class="badge b-upd">new release</span>`;
+    } else if (showAsUnavailable) {
+      badgeHtml = `<span class="badge b-default">unavailable</span>`;
     } else {
       badgeHtml = `<span class="badge b-ok">up to date</span>`;
     }
@@ -96,6 +117,13 @@ const UI = (() => {
     const versionLabel = cv
       ? `Your version: <strong>${cv}</strong>`
       : `<span class="muted">No version set</span>`;
+
+    // For apps with no package-manager source, show how long ago the version was noted
+    const noAutoTracking = !app.brew && !app.winget && !app.github;
+    const versionTimestamp = entry.versionSetAt || entry.addedAt || null;
+    const versionAgoHtml = noAutoTracking && cv && versionTimestamp
+      ? `<span class="version-set-ago">Version noted ${timeAgo(versionTimestamp)}</span>`
+      : '';
 
     const macData = release?.mac || null;
     const winData = release?.win || null;
@@ -131,6 +159,38 @@ const UI = (() => {
         </div>`;
     }
 
+    // Manual check prompt — shown when at least one configured platform returned no version
+    const macUnavailable = app.brew && release && (release.mac?.error || !release.mac?.version);
+    const winUnavailable = (app.winget || app.github) && release && (release.win?.error || !release.win?.version);
+    let manualCheckHtml = '';
+    if (macUnavailable || winUnavailable) {
+      const lastChecked = Store.getManualCheck(app.id);
+      let statusText, isOverdue;
+      if (!lastChecked) {
+        statusText = 'Never checked manually';
+        isOverdue = true;
+      } else {
+        const daysSince = Math.floor((Date.now() - lastChecked) / (1000 * 60 * 60 * 24));
+        const daysLeft  = 30 - daysSince;
+        if (daysLeft <= 0) {
+          statusText = `Last checked ${daysSince} day${daysSince !== 1 ? 's' : ''} ago — check overdue`;
+          isOverdue  = true;
+        } else {
+          const sinceStr = daysSince === 0 ? 'today' : `${daysSince} day${daysSince !== 1 ? 's' : ''} ago`;
+          statusText = `Last checked ${sinceStr} · ${daysLeft} day${daysLeft !== 1 ? 's' : ''} until next check`;
+          isOverdue  = false;
+        }
+      }
+      manualCheckHtml = `
+        <div class="app-card-manual-check${isOverdue ? ' manual-check-overdue' : ''}">
+          <div class="manual-check-info">
+            <span class="manual-check-label">Version unavailable — check release page monthly</span>
+            <span class="manual-check-status">${statusText}</span>
+          </div>
+          <button class="btn btn-sm" onclick="UI.markManualCheck('${app.id}')">Mark Checked</button>
+        </div>`;
+    }
+
     return `
       <div class="app-card ${anyNew ? 'card-has-update' : ''}" id="appcard-${app.id}">
         <div class="app-card-header">
@@ -149,10 +209,14 @@ const UI = (() => {
           ${macRow}${winRow}
         </div>
         <div class="app-card-footer">
-          <span class="current-version-label">${versionLabel}</span>
+          <div class="version-col">
+            <span class="current-version-label">${versionLabel}</span>
+            ${versionAgoHtml}
+          </div>
           <button class="btn btn-sm" onclick="UI.openVersionModal('${app.id}', true)">Edit version</button>
         </div>
         ${patchHtml}
+        ${manualCheckHtml}
       </div>`;
   }
 
@@ -570,6 +634,7 @@ const UI = (() => {
     closeAddCustomModal();
     renderCategoryFilters();
     renderCatalog();
+    openVersionModal(id, false);
   }
 
   function deleteCustomApp(id) {
@@ -577,6 +642,12 @@ const UI = (() => {
     if (Store.isTracked(id)) App.removeApp(id);
     renderCategoryFilters();
     renderCatalog();
+    App.render();
+  }
+
+  // ── Manual check ─────────────────────────────────────────────────────────────
+  function markManualCheck(id) {
+    Store.setManualCheck(id);
     App.render();
   }
 
@@ -605,5 +676,6 @@ const UI = (() => {
     openAddCustomModal, closeAddCustomModal, closeAddCustomModalOnBg,
     toggleCustomCategory, addCustomKeydown, confirmAddCustom, deleteCustomApp,
     setScanStatus, setProgress, setSpinner, setRefreshBtn, showBanner,
+    markManualCheck,
   };
 })();

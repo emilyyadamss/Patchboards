@@ -2,9 +2,10 @@
 // myApps   — catalog IDs the admin tracks, each storing the version they have deployed
 // releases — per-app dual-platform latest-version cache { mac: {…}, win: {…} }
 
-const MY_APPS_KEY    = 'patchboards_myapps_v3';
-const RELEASES_KEY   = 'patchboards_releases_v2';
-const CUSTOM_KEY     = 'patchboards_custom_v1';
+const MY_APPS_KEY      = 'patchboards_myapps_v3';
+const RELEASES_KEY     = 'patchboards_releases_v2';
+const CUSTOM_KEY       = 'patchboards_custom_v1';
+const MANUAL_CHECKS_KEY = 'patchboards_manual_checks_v1';
 
 const Store = (() => {
 
@@ -26,7 +27,8 @@ const Store = (() => {
 
   function addApp(id, currentVersion = null, channel = null) {
     if (myApps.find(a => a.id === id)) return;
-    myApps.push({ id, addedAt: Date.now(), currentVersion: currentVersion || null, channel: channel || null });
+    const now = Date.now();
+    myApps.push({ id, addedAt: now, currentVersion: currentVersion || null, channel: channel || null, versionSetAt: currentVersion ? now : null });
     saveMyApps();
   }
 
@@ -41,7 +43,7 @@ const Store = (() => {
 
   function setCurrentVersion(id, version) {
     const e = myApps.find(a => a.id === id);
-    if (e) { e.currentVersion = version || null; saveMyApps(); }
+    if (e) { e.currentVersion = version || null; e.versionSetAt = version ? Date.now() : null; saveMyApps(); }
   }
 
   function setChannel(id, channel) {
@@ -74,6 +76,28 @@ const Store = (() => {
   }
 
   function getCustomApps() { return customApps; }
+
+  // ── Manual checks ─────────────────────────────────────────────────────────────
+  // manualChecks[id] = timestamp (ms) of last manual check
+  let manualChecks = {};
+
+  function loadManualChecks() {
+    try {
+      const s = localStorage.getItem(MANUAL_CHECKS_KEY);
+      if (s) manualChecks = JSON.parse(s);
+    } catch { manualChecks = {}; }
+  }
+
+  function saveManualChecks() {
+    try { localStorage.setItem(MANUAL_CHECKS_KEY, JSON.stringify(manualChecks)); } catch {}
+  }
+
+  function setManualCheck(id) {
+    manualChecks[id] = Date.now();
+    saveManualChecks();
+  }
+
+  function getManualCheck(id) { return manualChecks[id] || null; }
 
   // ── Release cache ────────────────────────────────────────────────────────────
   // releases[id] = { mac: { version, sourceUrl, error } | null,
@@ -129,6 +153,7 @@ const Store = (() => {
     loadMyApps();
     loadReleases();
     loadCustomApps();
+    loadManualChecks();
   }
 
   return {
@@ -136,5 +161,6 @@ const Store = (() => {
     addApp, removeApp, isTracked, getMyApps, setCurrentVersion, setChannel,
     setRelease, getRelease, getDashboardStats, isNewRelease,
     addCustomApp, removeCustomApp, getCustomApps,
+    setManualCheck, getManualCheck,
   };
 })();
