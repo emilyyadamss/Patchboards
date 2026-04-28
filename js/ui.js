@@ -14,15 +14,15 @@ const UI = (() => {
     const s = Store.getDashboardStats();
     document.getElementById('statsGrid').innerHTML = `
       <div class="stat-card"><div class="stat-label">Tracked apps</div><div class="stat-value">${s.tracked}</div></div>
-      <div class="stat-card"><div class="stat-label">New releases</div><div class="stat-value ${s.newReleases ? 'warning' : ''}">${s.newReleases}</div></div>
+      <div class="stat-card"><div class="stat-label">New releases</div><div class="stat-value ${s.newReleases ? 'new-releases' : ''}">${s.newReleases}</div></div>
       <div class="stat-card"><div class="stat-label">Up to date</div><div class="stat-value ${s.upToDate && !s.newReleases ? 'success' : ''}">${s.upToDate}</div></div>
       <div class="stat-card"><div class="stat-label">Unavailable</div><div class="stat-value">${s.unknown}</div></div>
     `;
   }
 
   // ── Platform version row ─────────────────────────────────────────────────────
-  function platformVersionRow(platform, data, currentVersion, app) {
-    const label = platform === 'mac' ? 'Mac' : 'Windows';
+  function platformVersionRow(platform, data, currentVersion, app, labelOverride) {
+    const label = labelOverride || (platform === 'mac' ? 'Mac' : 'Windows');
     const pkg   = platform === 'mac' ? app.brew : app.winget;
 
     if (!pkg) return '';
@@ -60,15 +60,10 @@ const UI = (() => {
       versionHtml = `<span class="vpill v-cur" title="Latest available">${data.version}</span>`;
     }
 
-    const link = data.sourceUrl
-      ? `<a href="${data.sourceUrl}" target="_blank" rel="noopener" class="plat-link">release notes ↗</a>`
-      : '';
-
     return `
       <div class="plat-row ${isNew ? 'has-update' : ''}">
         <span class="plat-label">${label}</span>
         <span class="plat-version">${versionHtml}</span>
-        <span class="plat-meta">${link}</span>
       </div>`;
   }
 
@@ -102,8 +97,39 @@ const UI = (() => {
       ? `Your version: <strong>${cv}</strong>`
       : `<span class="muted">No version set</span>`;
 
-    const macRow = platformVersionRow('mac', release?.mac || null, cv, app);
-    const winRow = platformVersionRow('win', release?.win || null, cv, app);
+    const macData = release?.mac || null;
+    const winData = release?.win || null;
+    const versionsMatch = macData && winData &&
+      !macData.error && !winData.error &&
+      macData.version && winData.version &&
+      macData.version === winData.version;
+    const macRow = versionsMatch
+      ? platformVersionRow('mac', macData, cv, app, 'Mac & Windows')
+      : platformVersionRow('mac', macData, cv, app);
+    const winRow = versionsMatch ? '' : platformVersionRow('win', winData, cv, app);
+
+    let patchHtml = '';
+    if (!entry.currentVersion) {
+      patchHtml = `
+        <div class="app-card-patch">
+          <span class="patch-label">Patch decision</span>
+          <span class="patch-action pa-unavailable">Unavailable</span>
+          <span class="patch-reason">Set a version to enable patch tracking</span>
+        </div>`;
+    } else if (anyNew) {
+      const decision = PatchRules.decide(app.id);
+      const expediteLabel = decision.isExpedited ? 'Remove expedite' : 'Expedite';
+      patchHtml = `
+        <div class="app-card-patch">
+          <span class="patch-label">Patch decision</span>
+          <span class="patch-action pa-${decision.action}">${decision.label}</span>
+          <span class="patch-reason">${decision.reason}</span>
+          <button class="btn btn-sm patch-expedite-btn${decision.isExpedited ? ' active' : ''}"
+                  onclick="PatchRules.setExpedite('${app.id}', ${!decision.isExpedited}); App.render();">
+            ${expediteLabel}
+          </button>
+        </div>`;
+    }
 
     return `
       <div class="app-card ${anyNew ? 'card-has-update' : ''}" id="appcard-${app.id}">
@@ -126,6 +152,7 @@ const UI = (() => {
           <span class="current-version-label">${versionLabel}</span>
           <button class="btn btn-sm" onclick="UI.openVersionModal('${app.id}', true)">Edit version</button>
         </div>
+        ${patchHtml}
       </div>`;
   }
 
@@ -381,23 +408,23 @@ const UI = (() => {
     const cv = entry.currentVersion;
 
     const platformRows = [];
-    if (app.brew && release?.mac && !release.mac.error && release.mac.version) {
-      const vHtml = macNew && cv
+    const macValid = app.brew && release?.mac && !release.mac.error && release.mac.version;
+    const winValid = app.winget && release?.win && !release.win.error && release.win.version;
+    const verifyVersionsMatch = macValid && winValid && release.mac.version === release.win.version;
+
+    if (macValid) {
+      const label = verifyVersionsMatch ? 'Mac & Win' : 'Mac';
+      const isNew = verifyVersionsMatch ? (macNew || winNew) : macNew;
+      const vHtml = isNew && cv
         ? `<span class="vpill v-cur">${cv}</span><span class="v-arr">→</span><span class="vpill v-upd">${release.mac.version}</span>`
         : `<span class="vpill v-ok">${release.mac.version}</span>`;
-      const srcLink = release.mac.sourceUrl
-        ? `<a href="${release.mac.sourceUrl}" target="_blank" rel="noopener" class="verify-src-link">release notes ↗</a>`
-        : '';
-      platformRows.push(`<div class="verify-plat-row ${macNew ? 'has-update' : ''}"><span class="plat-label">Mac</span><span class="plat-version">${vHtml}</span>${srcLink}</div>`);
+      platformRows.push(`<div class="verify-plat-row ${isNew ? 'has-update' : ''}"><span class="plat-label">${label}</span><span class="plat-version">${vHtml}</span></div>`);
     }
-    if (app.winget && release?.win && !release.win.error && release.win.version) {
+    if (winValid && !verifyVersionsMatch) {
       const vHtml = winNew && cv
         ? `<span class="vpill v-cur">${cv}</span><span class="v-arr">→</span><span class="vpill v-upd">${release.win.version}</span>`
         : `<span class="vpill v-ok">${release.win.version}</span>`;
-      const srcLink = release.win.sourceUrl
-        ? `<a href="${release.win.sourceUrl}" target="_blank" rel="noopener" class="verify-src-link">release notes ↗</a>`
-        : '';
-      platformRows.push(`<div class="verify-plat-row ${winNew ? 'has-update' : ''}"><span class="plat-label">Win</span><span class="plat-version">${vHtml}</span>${srcLink}</div>`);
+      platformRows.push(`<div class="verify-plat-row ${winNew ? 'has-update' : ''}"><span class="plat-label">Win</span><span class="plat-version">${vHtml}</span></div>`);
     }
 
     const links = buildVerifyLinks(app, entry);

@@ -10,6 +10,7 @@ const App = (() => {
 
   async function init() {
     Store.load();
+    PatchRules.load();
     render();
     checkGitHubRateLimit();
     await fetchReleases();
@@ -59,7 +60,7 @@ const App = (() => {
     const s = Store.getDashboardStats();
     UI.setScanStatus(
       s.newReleases
-        ? `<strong>Done.</strong> <span style="color:var(--warning-text)">${s.newReleases} new release${s.newReleases !== 1 ? 's' : ''}</span> available · ${s.upToDate} up to date.`
+        ? `<strong>Done.</strong> <span style="color:#0284c7" class="new-releases-msg">${s.newReleases} new release${s.newReleases !== 1 ? 's' : ''}</span> available · ${s.upToDate} up to date.`
         : `<strong>All up to date.</strong> ${s.upToDate} app${s.upToDate !== 1 ? 's' : ''} tracked.`
     );
     render();

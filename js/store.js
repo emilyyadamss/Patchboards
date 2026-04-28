@@ -83,6 +83,7 @@ const Store = (() => {
   function getDashboardStats() {
     let newReleases = 0, upToDate = 0, unknown = 0;
     for (const entry of myApps) {
+      if (!entry.currentVersion) { unknown++; continue; }
       const rel = releases[entry.id];
       if (!rel) { unknown++; continue; }
       if (isNewRelease(entry, rel, 'mac') || isNewRelease(entry, rel, 'win')) {
