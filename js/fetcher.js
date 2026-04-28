@@ -16,6 +16,14 @@
 
 const Fetcher = (() => {
 
+  // Route all external API calls through the local server to avoid CORS blocks.
+  // The server applies the configured proxy (if any) before reaching the internet.
+  function proxyFetch(url, { ghToken } = {}) {
+    let proxyUrl = 'http://localhost:4242/fetch?url=' + encodeURIComponent(url);
+    if (ghToken) proxyUrl += '&gh_token=' + encodeURIComponent(ghToken);
+    return fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+  }
+
   // ── Version sorting ──────────────────────────────────────────────────────────
   function compareVersions(a, b) {
     const toNums = s => s.replace(/[^0-9.]/g, '').split('.').map(Number);
@@ -46,9 +54,8 @@ const Fetcher = (() => {
 
   // ── Homebrew (Mac) ───────────────────────────────────────────────────────────
   async function fetchBrewCask(caskName) {
-    const res = await fetch(
-      `https://formulae.brew.sh/api/cask/${encodeURIComponent(caskName)}.json`,
-      { signal: AbortSignal.timeout(8000) }
+    const res = await proxyFetch(
+      `https://formulae.brew.sh/api/cask/${encodeURIComponent(caskName)}.json`
     );
     if (!res.ok) throw new Error(`Homebrew API ${res.status}`);
     const d = await res.json();
@@ -59,9 +66,8 @@ const Fetcher = (() => {
   }
 
   async function fetchBrewFormula(formulaName) {
-    const res = await fetch(
-      `https://formulae.brew.sh/api/formula/${encodeURIComponent(formulaName)}.json`,
-      { signal: AbortSignal.timeout(8000) }
+    const res = await proxyFetch(
+      `https://formulae.brew.sh/api/formula/${encodeURIComponent(formulaName)}.json`
     );
     if (!res.ok) throw new Error(`Homebrew API ${res.status}`);
     const d = await res.json();
@@ -73,12 +79,9 @@ const Fetcher = (() => {
 
   // ── GitHub Releases (Windows — open-source apps) ────────────────────────────
   async function fetchGitHubRelease(repoPath) {
-    const headers = { Accept: 'application/vnd.github.v3+json' };
-    if (CONFIG.GITHUB_TOKEN) headers['Authorization'] = `token ${CONFIG.GITHUB_TOKEN}`;
-
-    const res = await fetch(
+    const res = await proxyFetch(
       `https://api.github.com/repos/${repoPath}/releases/latest`,
-      { headers, signal: AbortSignal.timeout(10000) }
+      { ghToken: CONFIG.GITHUB_TOKEN }
     );
 
     if (res.status === 404) throw new Error('No releases found on GitHub');
@@ -103,9 +106,8 @@ const Fetcher = (() => {
     const publisher = packageId.slice(0, dot);
     const pkg       = packageId.slice(dot + 1);
 
-    const res = await fetch(
-      `https://winget.run/api/v2/packages/${encodeURIComponent(publisher)}/${encodeURIComponent(pkg)}`,
-      { signal: AbortSignal.timeout(8000) }
+    const res = await proxyFetch(
+      `https://winget.run/api/v2/packages/${encodeURIComponent(publisher)}/${encodeURIComponent(pkg)}`
     );
 
     if (res.status === 404) throw new Error('Package not found on winget.run');
@@ -136,12 +138,9 @@ const Fetcher = (() => {
     const path = wingetIdToPath(packageId);
     if (!path) throw new Error('Invalid winget package ID');
 
-    const headers = { Accept: 'application/vnd.github.v3+json' };
-    if (CONFIG.GITHUB_TOKEN) headers['Authorization'] = `token ${CONFIG.GITHUB_TOKEN}`;
-
-    const res = await fetch(
+    const res = await proxyFetch(
       `https://api.github.com/repos/microsoft/winget-pkgs/contents/${path}`,
-      { headers, signal: AbortSignal.timeout(10000) }
+      { ghToken: CONFIG.GITHUB_TOKEN }
     );
 
     if (res.status === 404) throw new Error('Package not found in winget-pkgs');

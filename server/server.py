@@ -67,10 +67,11 @@ def detect_proxy():
     return None
 
 
-def fetch_url(url, *, timeout=15):
+def fetch_url(url, *, timeout=15, gh_token=None):
     """
     Fetch *url* and return (body_bytes, content_type).
     Requests are routed through PROXY_URL when set; otherwise direct.
+    gh_token is forwarded as an Authorization header for GitHub API calls.
     Raises urllib.error.URLError / urllib.error.HTTPError on failure.
     """
     if PROXY_URL:
@@ -80,7 +81,14 @@ def fetch_url(url, *, timeout=15):
     else:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    req = urllib.request.Request(url, headers={"User-Agent": "PatchBoards/1.0"})
+    headers = {
+        "User-Agent": "PatchBoards/1.0",
+        "Accept":     "application/vnd.github.v3+json",
+    }
+    if gh_token:
+        headers["Authorization"] = f"token {gh_token}"
+
+    req = urllib.request.Request(url, headers=headers)
     with opener.open(req, timeout=timeout) as resp:
         body = resp.read()
         content_type = resp.headers.get("Content-Type", "application/octet-stream")
@@ -449,7 +457,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_json({"version": None, "error": f"Could not find version for {package_id}"})
 
-        # GET /fetch?url=<encoded_url> — proxy an external HTTP request, avoiding browser CORS
+        # GET /fetch?url=<encoded_url>[&gh_token=<token>] — proxy an external HTTP
+        # request server-side, returning the response with CORS headers so the
+        # browser is never making cross-origin requests directly.
         elif path == "/fetch":
             target_url = params.get("url", [None])[0]
             if not target_url:
@@ -459,8 +469,9 @@ class Handler(BaseHTTPRequestHandler):
             if parsed_target.scheme not in ("http", "https"):
                 self.send_json({"error": "Only http/https URLs are supported"}, 400)
                 return
+            gh_token = params.get("gh_token", [None])[0]
             try:
-                body, content_type = fetch_url(target_url)
+                body, content_type = fetch_url(target_url, gh_token=gh_token)
                 self.send_response(200)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", len(body))
