@@ -338,12 +338,14 @@ body { min-height: 100vh; }
   padding-top:12px; border-top:1px solid var(--border);
   gap:8px; flex-wrap:wrap;
 }
+.version-col { display:flex; flex-direction:column; gap:2px; }
 .current-version-label { font-size:12px; color:var(--text-2); }
 .current-version-label strong {
   color:var(--text);
   font-family:'SF Mono','Fira Code','Cascadia Code',monospace;
   font-weight:600;
 }
+.version-set-ago { font-size:11px; color:var(--text-3); }
 .btn-sm { font-size:12px; padding:5px 10px; }
 
 /* ── Version input modal ─────────────────────────────────────────────────── */
@@ -842,6 +844,87 @@ body { min-height: 100vh; }
 .patch-expedite-btn.active {
   background: var(--warning-bg); color: var(--warning-text);
   border-color: rgba(180,83,9,0.3);
+}
+
+/* ── Manual check reminder ───────────────────────────────────────────────── */
+.app-card-manual-check {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+.app-card-manual-check.manual-check-overdue {
+  background: var(--warning-bg);
+  border-color: rgba(180,83,9,0.22);
+}
+@media (prefers-color-scheme: dark) {
+  .app-card-manual-check.manual-check-overdue {
+    border-color: rgba(251,191,36,0.22);
+  }
+}
+.manual-check-info {
+  display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;
+}
+.manual-check-label {
+  font-size: 11px; font-weight: 600; color: var(--text-2);
+}
+.manual-check-status {
+  font-size: 11px; color: var(--text-3);
+}
+.app-card-manual-check.manual-check-overdue .manual-check-label { color: var(--warning-text); }
+.app-card-manual-check.manual-check-overdue .manual-check-status { color: var(--warning-text); opacity: 0.8; }
+
+/* ── Add Custom Software modal ───────────────────────────────────────────── */
+.modal-box-lg { width: min(560px, calc(100vw - 2rem)); }
+
+.catalog-header-actions { display: flex; align-items: center; gap: 8px; }
+.catalog-add-custom-btn { font-size: 13px; padding: 8px 16px; font-weight: 600; }
+
+.custom-form { display: flex; flex-direction: column; gap: 14px; }
+.form-group  { display: flex; flex-direction: column; gap: 5px; }
+.form-row    { display: flex; gap: 12px; }
+.form-group-half { flex: 1; min-width: 0; }
+
+
+.form-label    { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.form-required { color: var(--danger-text); }
+.form-optional { font-size: 11px; font-weight: 400; color: var(--text-3); }
+
+.form-checkboxes { display: flex; gap: 16px; align-items: center; padding: 4px 0; }
+.form-checkbox-label {
+  font-size: 13px; color: var(--text);
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+}
+.form-checkbox-label input[type="checkbox"] {
+  width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer;
+}
+
+.custom-app-error {
+  font-size: 13px; color: var(--danger-text);
+  background: var(--danger-bg); border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md); padding: 8px 12px;
+}
+
+/* Custom badge and delete button in catalog cards */
+.catalog-custom-tag {
+  font-size: 10px; padding: 2px 7px; border-radius: 20px; font-weight: 600;
+  display: inline-block;
+  background: rgba(168,85,247,0.1); color: #a855f7;
+  border: 1px solid rgba(168,85,247,0.25);
+}
+@media (prefers-color-scheme: dark) {
+  .catalog-custom-tag { background: rgba(168,85,247,0.15); color: #c084fc; }
+}
+
+.catalog-delete-btn {
+  flex-shrink: 0; font-size: 14px; padding: 4px 8px;
+  color: var(--text-3); border: none; background: transparent; line-height: 1;
+  border-radius: var(--radius-md); cursor: pointer;
+}
+.catalog-delete-btn:hover {
+  background: var(--danger-bg); color: var(--danger-text); border-color: transparent;
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */

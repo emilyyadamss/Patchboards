@@ -9,6 +9,18 @@ let _modalIsEdit  = false;
 
 const UI = (() => {
 
+  function timeAgo(ts) {
+    if (!ts) return null;
+    const days = Math.floor((Date.now() - ts) / 86400000);
+    if (days === 0) return 'today';
+    if (days === 1) return '1 day ago';
+    if (days < 14)  return `${days} days ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 9)  return `${weeks} week${weeks !== 1 ? 's' : ''} ago`;
+    const months = Math.floor(days / 30);
+    return `${months} month${months !== 1 ? 's' : ''} ago`;
+  }
+
   // ── Stats bar ────────────────────────────────────────────────────────────────
   function renderStats() {
     const s = Store.getDashboardStats();
@@ -73,6 +85,13 @@ const UI = (() => {
     const winNew = Store.isNewRelease(entry, release, 'win');
     const anyNew = macNew || winNew;
 
+    // An app is "stale-unavailable" when no platform returned a version AND
+    // it has been more than 14 days since it was added or last manually checked.
+    const hasNoAutoVersion = release !== null && !release.mac?.version && !release.win?.version;
+    const lastManualCheck  = Store.getManualCheck(app.id);
+    const baselineTime     = lastManualCheck || entry.addedAt || 0;
+    const showAsUnavailable = hasNoAutoVersion && (Date.now() - baselineTime) > 14 * 24 * 60 * 60 * 1000;
+
     let badgeHtml;
     if (!release) {
       badgeHtml = `<span class="badge b-loading">checking…</span>`;
@@ -80,6 +99,8 @@ const UI = (() => {
       badgeHtml = `<span class="badge b-default">no version set</span>`;
     } else if (anyNew) {
       badgeHtml = `<span class="badge b-upd">new release</span>`;
+    } else if (showAsUnavailable) {
+      badgeHtml = `<span class="badge b-default">unavailable</span>`;
     } else {
       badgeHtml = `<span class="badge b-ok">up to date</span>`;
     }
@@ -96,6 +117,13 @@ const UI = (() => {
     const versionLabel = cv
       ? `Your version: <strong>${cv}</strong>`
       : `<span class="muted">No version set</span>`;
+
+    // For apps with no package-manager source, show how long ago the version was noted
+    const noAutoTracking = !app.brew && !app.winget && !app.github;
+    const versionTimestamp = entry.versionSetAt || entry.addedAt || null;
+    const versionAgoHtml = noAutoTracking && cv && versionTimestamp
+      ? `<span class="version-set-ago">Version noted ${timeAgo(versionTimestamp)}</span>`
+      : '';
 
     const macData = release?.mac || null;
     const winData = release?.win || null;
@@ -131,6 +159,38 @@ const UI = (() => {
         </div>`;
     }
 
+    // Manual check prompt — shown when at least one configured platform returned no version
+    const macUnavailable = app.brew && release && (release.mac?.error || !release.mac?.version);
+    const winUnavailable = (app.winget || app.github) && release && (release.win?.error || !release.win?.version);
+    let manualCheckHtml = '';
+    if (macUnavailable || winUnavailable) {
+      const lastChecked = Store.getManualCheck(app.id);
+      let statusText, isOverdue;
+      if (!lastChecked) {
+        statusText = 'Never checked manually';
+        isOverdue = true;
+      } else {
+        const daysSince = Math.floor((Date.now() - lastChecked) / (1000 * 60 * 60 * 24));
+        const daysLeft  = 30 - daysSince;
+        if (daysLeft <= 0) {
+          statusText = `Last checked ${daysSince} day${daysSince !== 1 ? 's' : ''} ago — check overdue`;
+          isOverdue  = true;
+        } else {
+          const sinceStr = daysSince === 0 ? 'today' : `${daysSince} day${daysSince !== 1 ? 's' : ''} ago`;
+          statusText = `Last checked ${sinceStr} · ${daysLeft} day${daysLeft !== 1 ? 's' : ''} until next check`;
+          isOverdue  = false;
+        }
+      }
+      manualCheckHtml = `
+        <div class="app-card-manual-check${isOverdue ? ' manual-check-overdue' : ''}">
+          <div class="manual-check-info">
+            <span class="manual-check-label">Version unavailable — check release page monthly</span>
+            <span class="manual-check-status">${statusText}</span>
+          </div>
+          <button class="btn btn-sm" onclick="UI.markManualCheck('${app.id}')">Mark Checked</button>
+        </div>`;
+    }
+
     return `
       <div class="app-card ${anyNew ? 'card-has-update' : ''}" id="appcard-${app.id}">
         <div class="app-card-header">
@@ -149,10 +209,14 @@ const UI = (() => {
           ${macRow}${winRow}
         </div>
         <div class="app-card-footer">
-          <span class="current-version-label">${versionLabel}</span>
+          <div class="version-col">
+            <span class="current-version-label">${versionLabel}</span>
+            ${versionAgoHtml}
+          </div>
           <button class="btn btn-sm" onclick="UI.openVersionModal('${app.id}', true)">Edit version</button>
         </div>
         ${patchHtml}
+        ${manualCheckHtml}
       </div>`;
   }
 
@@ -306,8 +370,9 @@ const UI = (() => {
   }
 
   function renderCategoryFilters() {
-    const all = [{ id: 'all', label: 'All' }]
-      .concat(CATALOG_CATEGORIES.map(c => ({ id: c, label: c })));
+    const customCats = Store.getCustomApps().map(a => a.category);
+    const merged = [...new Set([...CATALOG_CATEGORIES, ...customCats])].sort();
+    const all = [{ id: 'all', label: 'All' }].concat(merged.map(c => ({ id: c, label: c })));
     document.getElementById('categoryFilters').innerHTML = all.map(c =>
       `<button class="cat-btn ${c.id === _catalogCategory ? 'active' : ''}" onclick="UI.setCategoryFilter('${c.id}', this)">${c.label}</button>`
     ).join('');
@@ -328,6 +393,12 @@ const UI = (() => {
       const platBadges = app.platforms.map(p =>
         `<span class="platform-badge platform-${p}">${p === 'mac' ? 'Mac' : 'Win'}</span>`
       ).join('');
+      const customBadge = app.isCustom
+        ? `<span class="catalog-custom-tag">Custom</span>`
+        : '';
+      const deleteBtn = app.isCustom
+        ? `<button class="btn catalog-delete-btn" title="Remove custom app" onclick="UI.deleteCustomApp('${app.id}')">&#x2715;</button>`
+        : '';
       return `
         <div class="catalog-card ${tracked ? 'is-tracked' : ''}">
           <div class="catalog-card-icon">${app.name.charAt(0)}</div>
@@ -336,9 +407,11 @@ const UI = (() => {
             <div class="catalog-card-desc">${app.desc}</div>
             <div class="catalog-card-meta">
               <span class="catalog-cat-tag">${app.category}</span>
+              ${customBadge}
               ${platBadges}
             </div>
           </div>
+          ${deleteBtn}
           ${tracked
             ? `<button class="btn catalog-track-btn tracked" onclick="App.removeApp('${app.id}'); UI.renderCatalog(); App.render();">Tracked</button>`
             : `<button class="btn catalog-track-btn primary"  onclick="UI.openVersionModal('${app.id}', false)">Track</button>`
@@ -493,6 +566,91 @@ const UI = (() => {
     }</div>`;
   }
 
+  // ── Add Custom Software modal ────────────────────────────────────────────────
+  function openAddCustomModal() {
+    document.getElementById('customAppName').value = '';
+    document.getElementById('customAppDesc').value = '';
+    document.getElementById('customAppBrew').value = '';
+    document.getElementById('customAppWinget').value = '';
+    document.getElementById('customAppHomepage').value = '';
+    document.getElementById('customAppCategoryCustom').value = '';
+    document.getElementById('customCategoryInputGroup').style.display = 'none';
+    document.getElementById('customPlatformMac').checked = true;
+    document.getElementById('customPlatformWin').checked = true;
+    document.getElementById('customAppError').style.display = 'none';
+
+    const sel = document.getElementById('customAppCategory');
+    const customCats = Store.getCustomApps().map(a => a.category).filter(c => !CATALOG_CATEGORIES.includes(c));
+    const allCats = [...CATALOG_CATEGORIES, ...customCats];
+    sel.innerHTML = `<option value="">Select category…</option>` +
+      allCats.map(c => `<option value="${c}">${c}</option>`).join('') +
+      `<option value="__custom__">Custom…</option>`;
+
+    document.getElementById('addCustomModal').style.display = 'flex';
+    document.getElementById('customAppName').focus();
+  }
+
+  function closeAddCustomModal() {
+    document.getElementById('addCustomModal').style.display = 'none';
+  }
+
+  function closeAddCustomModalOnBg(e) {
+    if (e.target === document.getElementById('addCustomModal')) closeAddCustomModal();
+  }
+
+  function toggleCustomCategory() {
+    const val = document.getElementById('customAppCategory').value;
+    document.getElementById('customCategoryInputGroup').style.display = val === '__custom__' ? 'flex' : 'none';
+  }
+
+  function addCustomKeydown(e) {
+    if (e.key === 'Enter') confirmAddCustom();
+    if (e.key === 'Escape') closeAddCustomModal();
+  }
+
+  function confirmAddCustom() {
+    const name = document.getElementById('customAppName').value.trim();
+    const desc = document.getElementById('customAppDesc').value.trim();
+    const catSel = document.getElementById('customAppCategory').value;
+    const catCustom = document.getElementById('customAppCategoryCustom').value.trim();
+    const category = catSel === '__custom__' ? catCustom : catSel;
+    const brew = document.getElementById('customAppBrew').value.trim() || null;
+    const winget = document.getElementById('customAppWinget').value.trim() || null;
+    const homepage = document.getElementById('customAppHomepage').value.trim() || null;
+    const platforms = [];
+    if (document.getElementById('customPlatformMac').checked) platforms.push('mac');
+    if (document.getElementById('customPlatformWin').checked) platforms.push('win');
+
+    const errorEl = document.getElementById('customAppError');
+    const showErr = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+
+    if (!name) { showErr('Name is required.'); document.getElementById('customAppName').focus(); return; }
+    if (!category) { showErr('Please select or enter a category.'); return; }
+    if (!platforms.length) { showErr('Please select at least one platform.'); return; }
+
+    const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '') + '-' + Date.now();
+    Store.addCustomApp({ id, name, category, desc: desc || name, platforms, brew, winget, homepage, isCustom: true });
+
+    closeAddCustomModal();
+    renderCategoryFilters();
+    renderCatalog();
+    openVersionModal(id, false);
+  }
+
+  function deleteCustomApp(id) {
+    Store.removeCustomApp(id);
+    if (Store.isTracked(id)) App.removeApp(id);
+    renderCategoryFilters();
+    renderCatalog();
+    App.render();
+  }
+
+  // ── Manual check ─────────────────────────────────────────────────────────────
+  function markManualCheck(id) {
+    Store.setManualCheck(id);
+    App.render();
+  }
+
   // ── Status bar helpers ───────────────────────────────────────────────────────
   function setScanStatus(html) { document.getElementById('scanStatusText').innerHTML = html; }
   function setProgress(pct) {
@@ -515,6 +673,9 @@ const UI = (() => {
     openVersionModal, closeVersionModal, closeVersionModalOnBg,
     confirmVersionModal, versionModalKeydown,
     openVerifyPanel, closeVerifyPanel, closeVerifyPanelOnBg,
+    openAddCustomModal, closeAddCustomModal, closeAddCustomModalOnBg,
+    toggleCustomCategory, addCustomKeydown, confirmAddCustom, deleteCustomApp,
     setScanStatus, setProgress, setSpinner, setRefreshBtn, showBanner,
+    markManualCheck,
   };
 })();
