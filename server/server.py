@@ -11,12 +11,80 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
+import urllib.error
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PORT = 4242
+
+# ── Proxy configuration ──────────────────────────────────────────────────────
+
+# Resolved once at startup; used by fetch_url() and logged on boot.
+PROXY_URL = None
+
+
+def _detect_windows_system_proxy():
+    """Read proxy from the Windows Internet Settings registry key."""
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+        )
+        enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
+        if enabled:
+            server, _ = winreg.QueryValueEx(key, "ProxyServer")
+            if server:
+                return server if "://" in server else f"http://{server}"
+    except Exception:
+        pass
+    return None
+
+
+def detect_proxy():
+    """
+    Resolve the proxy URL to use, in priority order:
+      1. --proxy=<url> CLI argument
+      2. HTTPS_PROXY / HTTP_PROXY environment variables
+      3. Windows Internet Settings registry (Windows only)
+    Returns the proxy URL string, or None if no proxy is configured.
+    """
+    for arg in sys.argv[1:]:
+        if arg.startswith("--proxy="):
+            return arg.split("=", 1)[1].strip() or None
+
+    for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        val = os.environ.get(var, "").strip()
+        if val:
+            return val
+
+    if sys.platform == "win32":
+        return _detect_windows_system_proxy()
+
+    return None
+
+
+def fetch_url(url, *, timeout=15):
+    """
+    Fetch *url* and return (body_bytes, content_type).
+    Requests are routed through PROXY_URL when set; otherwise direct.
+    Raises urllib.error.URLError / urllib.error.HTTPError on failure.
+    """
+    if PROXY_URL:
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": PROXY_URL, "https": PROXY_URL})
+        )
+    else:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    req = urllib.request.Request(url, headers={"User-Agent": "PatchBoards/1.0"})
+    with opener.open(req, timeout=timeout) as resp:
+        body = resp.read()
+        content_type = resp.headers.get("Content-Type", "application/octet-stream")
+    return body, content_type
 
 # ── Homebrew ────────────────────────────────────────────────────────────────
 
@@ -381,6 +449,33 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_json({"version": None, "error": f"Could not find version for {package_id}"})
 
+        # GET /fetch?url=<encoded_url> — proxy an external HTTP request, avoiding browser CORS
+        elif path == "/fetch":
+            target_url = params.get("url", [None])[0]
+            if not target_url:
+                self.send_json({"error": "Missing url parameter"}, 400)
+                return
+            parsed_target = urlparse(target_url)
+            if parsed_target.scheme not in ("http", "https"):
+                self.send_json({"error": "Only http/https URLs are supported"}, 400)
+                return
+            try:
+                body, content_type = fetch_url(target_url)
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", len(body))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.end_headers()
+                self.wfile.write(body)
+            except urllib.error.HTTPError as e:
+                self.send_json({"error": f"Upstream HTTP {e.code}: {e.reason}"}, 502)
+            except urllib.error.URLError as e:
+                self.send_json({"error": f"Request failed: {e.reason}"}, 502)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 502)
+
         # GET /health — sanity check
         elif path == "/health":
             which = "where" if sys.platform == "win32" else "which"
@@ -390,6 +485,7 @@ class Handler(BaseHTTPRequestHandler):
                 "homebrew": brew_ok,
                 "winget": sys.platform == "win32",
                 "platform": sys.platform,
+                "proxy": PROXY_URL,
             })
 
         else:
@@ -399,6 +495,8 @@ class Handler(BaseHTTPRequestHandler):
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    PROXY_URL = detect_proxy()
+
     print(f"\n  PatchBoards local server")
     print(f"  Listening on http://localhost:{PORT}")
     print(f"  Press Ctrl+C to stop\n")
@@ -406,14 +504,21 @@ if __name__ == "__main__":
     which = "where" if sys.platform == "win32" else "which"
     brew_ok = subprocess.run([which, "brew"], capture_output=True).returncode == 0
     if not brew_ok:
-        print("  ⚠️  Homebrew not found — install it from https://brew.sh")
+        print("  [!] Homebrew not found — install it from https://brew.sh")
     else:
-        print("  ✓  Homebrew detected")
+        print("  [+] Homebrew detected")
 
     if sys.platform == "win32":
         winget_ok = subprocess.run(["where", "winget"], capture_output=True).returncode == 0
-        print(f"  {'✓' if winget_ok else '⚠️'} winget {'detected' if winget_ok else 'not found'}")
+        print(f"  {'[+]' if winget_ok else '[!]'} winget {'detected' if winget_ok else 'not found'}")
 
+    if PROXY_URL:
+        print(f"  [+] Proxy: {PROXY_URL}")
+        print(f"      (set via --proxy=<url>, HTTPS_PROXY/HTTP_PROXY env, or Windows settings)")
+    else:
+        print("  [ ] No proxy configured  (use --proxy=http://host:port to set one)")
+
+    print(f"\n  External API routing available at http://localhost:{PORT}/fetch?url=<encoded_url>")
     print()
     server = HTTPServer(("localhost", PORT), Handler)
     try:
