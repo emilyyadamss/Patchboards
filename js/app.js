@@ -19,7 +19,8 @@ const App = (() => {
   async function checkGitHubRateLimit() {
     if (CONFIG.GITHUB_TOKEN) return;
     try {
-      const res  = await fetch('https://api.github.com/rate_limit', { signal: AbortSignal.timeout(4000) });
+      const proxyUrl = 'http://localhost:4242/fetch?url=' + encodeURIComponent('https://api.github.com/rate_limit');
+      const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) });
       const data = await res.json();
       const remaining = data?.rate?.remaining ?? 60;
       if (remaining < 10) {
