@@ -306,8 +306,9 @@ const UI = (() => {
   }
 
   function renderCategoryFilters() {
-    const all = [{ id: 'all', label: 'All' }]
-      .concat(CATALOG_CATEGORIES.map(c => ({ id: c, label: c })));
+    const customCats = Store.getCustomApps().map(a => a.category);
+    const merged = [...new Set([...CATALOG_CATEGORIES, ...customCats])].sort();
+    const all = [{ id: 'all', label: 'All' }].concat(merged.map(c => ({ id: c, label: c })));
     document.getElementById('categoryFilters').innerHTML = all.map(c =>
       `<button class="cat-btn ${c.id === _catalogCategory ? 'active' : ''}" onclick="UI.setCategoryFilter('${c.id}', this)">${c.label}</button>`
     ).join('');
@@ -328,6 +329,12 @@ const UI = (() => {
       const platBadges = app.platforms.map(p =>
         `<span class="platform-badge platform-${p}">${p === 'mac' ? 'Mac' : 'Win'}</span>`
       ).join('');
+      const customBadge = app.isCustom
+        ? `<span class="catalog-custom-tag">Custom</span>`
+        : '';
+      const deleteBtn = app.isCustom
+        ? `<button class="btn catalog-delete-btn" title="Remove custom app" onclick="UI.deleteCustomApp('${app.id}')">&#x2715;</button>`
+        : '';
       return `
         <div class="catalog-card ${tracked ? 'is-tracked' : ''}">
           <div class="catalog-card-icon">${app.name.charAt(0)}</div>
@@ -336,9 +343,11 @@ const UI = (() => {
             <div class="catalog-card-desc">${app.desc}</div>
             <div class="catalog-card-meta">
               <span class="catalog-cat-tag">${app.category}</span>
+              ${customBadge}
               ${platBadges}
             </div>
           </div>
+          ${deleteBtn}
           ${tracked
             ? `<button class="btn catalog-track-btn tracked" onclick="App.removeApp('${app.id}'); UI.renderCatalog(); App.render();">Tracked</button>`
             : `<button class="btn catalog-track-btn primary"  onclick="UI.openVersionModal('${app.id}', false)">Track</button>`
@@ -493,6 +502,84 @@ const UI = (() => {
     }</div>`;
   }
 
+  // ── Add Custom Software modal ────────────────────────────────────────────────
+  function openAddCustomModal() {
+    document.getElementById('customAppName').value = '';
+    document.getElementById('customAppDesc').value = '';
+    document.getElementById('customAppBrew').value = '';
+    document.getElementById('customAppWinget').value = '';
+    document.getElementById('customAppHomepage').value = '';
+    document.getElementById('customAppCategoryCustom').value = '';
+    document.getElementById('customCategoryInputGroup').style.display = 'none';
+    document.getElementById('customPlatformMac').checked = true;
+    document.getElementById('customPlatformWin').checked = true;
+    document.getElementById('customAppError').style.display = 'none';
+
+    const sel = document.getElementById('customAppCategory');
+    const customCats = Store.getCustomApps().map(a => a.category).filter(c => !CATALOG_CATEGORIES.includes(c));
+    const allCats = [...CATALOG_CATEGORIES, ...customCats];
+    sel.innerHTML = `<option value="">Select category…</option>` +
+      allCats.map(c => `<option value="${c}">${c}</option>`).join('') +
+      `<option value="__custom__">Custom…</option>`;
+
+    document.getElementById('addCustomModal').style.display = 'flex';
+    document.getElementById('customAppName').focus();
+  }
+
+  function closeAddCustomModal() {
+    document.getElementById('addCustomModal').style.display = 'none';
+  }
+
+  function closeAddCustomModalOnBg(e) {
+    if (e.target === document.getElementById('addCustomModal')) closeAddCustomModal();
+  }
+
+  function toggleCustomCategory() {
+    const val = document.getElementById('customAppCategory').value;
+    document.getElementById('customCategoryInputGroup').style.display = val === '__custom__' ? 'flex' : 'none';
+  }
+
+  function addCustomKeydown(e) {
+    if (e.key === 'Enter') confirmAddCustom();
+    if (e.key === 'Escape') closeAddCustomModal();
+  }
+
+  function confirmAddCustom() {
+    const name = document.getElementById('customAppName').value.trim();
+    const desc = document.getElementById('customAppDesc').value.trim();
+    const catSel = document.getElementById('customAppCategory').value;
+    const catCustom = document.getElementById('customAppCategoryCustom').value.trim();
+    const category = catSel === '__custom__' ? catCustom : catSel;
+    const brew = document.getElementById('customAppBrew').value.trim() || null;
+    const winget = document.getElementById('customAppWinget').value.trim() || null;
+    const homepage = document.getElementById('customAppHomepage').value.trim() || null;
+    const platforms = [];
+    if (document.getElementById('customPlatformMac').checked) platforms.push('mac');
+    if (document.getElementById('customPlatformWin').checked) platforms.push('win');
+
+    const errorEl = document.getElementById('customAppError');
+    const showErr = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+
+    if (!name) { showErr('Name is required.'); document.getElementById('customAppName').focus(); return; }
+    if (!category) { showErr('Please select or enter a category.'); return; }
+    if (!platforms.length) { showErr('Please select at least one platform.'); return; }
+
+    const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '') + '-' + Date.now();
+    Store.addCustomApp({ id, name, category, desc: desc || name, platforms, brew, winget, homepage, isCustom: true });
+
+    closeAddCustomModal();
+    renderCategoryFilters();
+    renderCatalog();
+  }
+
+  function deleteCustomApp(id) {
+    Store.removeCustomApp(id);
+    if (Store.isTracked(id)) App.removeApp(id);
+    renderCategoryFilters();
+    renderCatalog();
+    App.render();
+  }
+
   // ── Status bar helpers ───────────────────────────────────────────────────────
   function setScanStatus(html) { document.getElementById('scanStatusText').innerHTML = html; }
   function setProgress(pct) {
@@ -515,6 +602,8 @@ const UI = (() => {
     openVersionModal, closeVersionModal, closeVersionModalOnBg,
     confirmVersionModal, versionModalKeydown,
     openVerifyPanel, closeVerifyPanel, closeVerifyPanelOnBg,
+    openAddCustomModal, closeAddCustomModal, closeAddCustomModalOnBg,
+    toggleCustomCategory, addCustomKeydown, confirmAddCustom, deleteCustomApp,
     setScanStatus, setProgress, setSpinner, setRefreshBtn, showBanner,
   };
 })();

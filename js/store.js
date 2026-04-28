@@ -2,8 +2,9 @@
 // myApps   — catalog IDs the admin tracks, each storing the version they have deployed
 // releases — per-app dual-platform latest-version cache { mac: {…}, win: {…} }
 
-const MY_APPS_KEY  = 'patchboards_myapps_v3';
-const RELEASES_KEY = 'patchboards_releases_v2';
+const MY_APPS_KEY    = 'patchboards_myapps_v3';
+const RELEASES_KEY   = 'patchboards_releases_v2';
+const CUSTOM_KEY     = 'patchboards_custom_v1';
 
 const Store = (() => {
 
@@ -47,6 +48,32 @@ const Store = (() => {
     const e = myApps.find(a => a.id === id);
     if (e) { e.channel = channel || null; saveMyApps(); }
   }
+
+  // ── Custom Apps ──────────────────────────────────────────────────────────────
+  let customApps = [];
+
+  function loadCustomApps() {
+    try {
+      const s = localStorage.getItem(CUSTOM_KEY);
+      if (s) customApps = JSON.parse(s);
+    } catch { customApps = []; }
+  }
+
+  function saveCustomApps() {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customApps)); } catch {}
+  }
+
+  function addCustomApp(app) {
+    customApps.push(app);
+    saveCustomApps();
+  }
+
+  function removeCustomApp(id) {
+    customApps = customApps.filter(a => a.id !== id);
+    saveCustomApps();
+  }
+
+  function getCustomApps() { return customApps; }
 
   // ── Release cache ────────────────────────────────────────────────────────────
   // releases[id] = { mac: { version, sourceUrl, error } | null,
@@ -101,11 +128,13 @@ const Store = (() => {
   function load() {
     loadMyApps();
     loadReleases();
+    loadCustomApps();
   }
 
   return {
     load,
     addApp, removeApp, isTracked, getMyApps, setCurrentVersion, setChannel,
     setRelease, getRelease, getDashboardStats, isNewRelease,
+    addCustomApp, removeCustomApp, getCustomApps,
   };
 })();

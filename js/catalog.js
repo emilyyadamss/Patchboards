@@ -122,12 +122,13 @@ const CATALOG = [
 const CATALOG_CATEGORIES = [...new Set(CATALOG.map(a => a.category))].sort();
 
 function getCatalogApp(id) {
-  return CATALOG.find(a => a.id === id) || null;
+  return CATALOG.find(a => a.id === id) || Store.getCustomApps().find(a => a.id === id) || null;
 }
 
 function filterCatalog({ query = '', platform = 'all', category = 'all' } = {}) {
+  const allApps = [...CATALOG, ...Store.getCustomApps()];
   const q = query.toLowerCase().trim();
-  return CATALOG.filter(app => {
+  return allApps.filter(app => {
     if (platform !== 'all' && !app.platforms.includes(platform)) return false;
     if (category !== 'all' && app.category !== category) return false;
     if (q && !app.name.toLowerCase().includes(q) && !app.desc.toLowerCase().includes(q) && !app.category.toLowerCase().includes(q)) return false;
