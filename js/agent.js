@@ -33,7 +33,8 @@ const Agent = (() => {
 
 For each app below:
 - IMPORTANT: if "latest available" is provided, copy it exactly into "latestVersion". Do not substitute your own version number
-- If "latest available" is NOT provided, use your knowledge to fill in the latest stable version
+- If "latest available" is NOT provided, use web_search to find the current latest stable version for that app — do NOT rely on training knowledge for version numbers
+- For apps tagged with a channel (e.g. ESR), search specifically for that channel's latest version, which follows a separate versioning track
 - Determine whether there is a known CVE or security advisory between the deployed version and the latest
 - Write a one-sentence summary of the most notable change in the latest release
 - Provide the official release notes or changelog URL (use the real, well-known URL for each project)
@@ -68,7 +69,8 @@ One object per input app, in the same order. Set releaseUrl to null if genuinely
       },
       body: JSON.stringify({
         model: CONFIG.MODEL,
-        max_tokens: 1024,
+        max_tokens: 2048,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -268,8 +270,11 @@ const AgentUI = (() => {
       const url     = ai?.releaseUrl || '';
       const link    = url ? `<a href="${url}" target="_blank" rel="noopener" class="plat-link">release notes ↗</a>` : '';
 
+      const isUpToDate = !!(cv && latest && latest === cv);
+      const rowClass   = isUpToDate ? 'is-ok' : isSec ? 'is-sec' : '';
+
       return `
-        <div class="agent-pkg-row ${isSec ? 'is-sec' : ''}">
+        <div class="agent-pkg-row ${rowClass}">
           <div class="agent-pkg-body">
             <div class="agent-pkg-name-row">
               <span class="agent-pkg-name">${app.name}</span>

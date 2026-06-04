@@ -22,6 +22,7 @@
       <div class="topbar-actions">
         <button id="refreshBtn" class="btn" onclick="App.fetchReleases()">Refresh</button>
         <button class="btn" onclick="AgentUI.openPanel()">Agent Scan</button>
+        <button class="btn" onclick="EnvScanUI.open()">Env Scan</button>
         <button class="btn" onclick="UI.openVerifyPanel()">Verify Releases</button>
         <button class="btn primary" onclick="UI.openCatalog()">Browse Software</button>
       </div>
@@ -147,6 +148,8 @@
           <p class="catalog-subtitle">Add apps to track Mac and Windows releases side-by-side</p>
         </div>
         <div class="catalog-header-actions">
+          <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="UI.handleImportFile(event)">
+          <button class="btn catalog-add-custom-btn" onclick="document.getElementById('importFileInput').click()">Import</button>
           <button class="btn catalog-add-custom-btn" onclick="UI.openAddCustomModal()">Add Custom</button>
           <button class="btn catalog-close" onclick="UI.closeCatalog()" aria-label="Close">&#x2715;</button>
         </div>
@@ -175,6 +178,20 @@
         <button class="btn catalog-close" onclick="AgentUI.closePanel()" aria-label="Close">&#x2715;</button>
       </div>
       <div id="agentContent" class="agent-content"></div>
+    </div>
+  </div>
+
+  <!-- Environment Scan panel -->
+  <div id="envScanOverlay" class="catalog-overlay" style="display:none" onclick="EnvScanUI.closeOnBg(event)">
+    <div class="catalog-panel">
+      <div class="catalog-header">
+        <div>
+          <h2 class="catalog-title">Environment Scan</h2>
+          <p class="catalog-subtitle">Discover installed Windows packages that need security or age-based updates</p>
+        </div>
+        <button class="btn catalog-close" onclick="EnvScanUI.close()" aria-label="Close">&#x2715;</button>
+      </div>
+      <div id="envScanContent" class="env-scan-content"></div>
     </div>
   </div>
 
@@ -220,6 +237,7 @@
   <script src="js/patchRules.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/agent.js"></script>
+  <script src="js/envScan.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

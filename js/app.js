@@ -11,6 +11,7 @@ const App = (() => {
   async function init() {
     Store.load();
     PatchRules.load();
+    EnvScan.load();
     render();
     checkGitHubRateLimit();
     await fetchReleases();

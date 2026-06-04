@@ -127,37 +127,26 @@ const UI = (() => {
 
     const macData = release?.mac || null;
     const winData = release?.win || null;
-    const versionsMatch = macData && winData &&
-      !macData.error && !winData.error &&
-      macData.version && winData.version &&
-      macData.version === winData.version;
-    const macRow = versionsMatch
-      ? platformVersionRow('mac', macData, cv, app, 'Mac & Windows')
-      : platformVersionRow('mac', macData, cv, app);
-    const winRow = versionsMatch ? '' : platformVersionRow('win', winData, cv, app);
+    const hasMac = !!app.brew;
+    const hasWin = !!(app.winget || app.github);
+    const combinedLabel = (hasMac && hasWin) ? 'Windows/Mac' : hasMac ? 'Mac' : 'Windows';
+    const displayPlatform = hasMac ? 'mac' : 'win';
+    const displayData = (hasMac && macData && !macData.error && macData.version) ? macData : winData;
+    const platformRow = platformVersionRow(displayPlatform, displayData, cv, app, combinedLabel);
 
-    let patchHtml = '';
-    if (!entry.currentVersion) {
-      patchHtml = `
-        <div class="app-card-patch">
-          <span class="patch-label">Patch decision</span>
-          <span class="patch-action pa-unavailable">Unavailable</span>
-          <span class="patch-reason">Set a version to enable patch tracking</span>
-        </div>`;
-    } else if (anyNew) {
-      const decision = PatchRules.decide(app.id);
-      const expediteLabel = decision.isExpedited ? 'Remove expedite' : 'Expedite';
-      patchHtml = `
-        <div class="app-card-patch">
-          <span class="patch-label">Patch decision</span>
-          <span class="patch-action pa-${decision.action}">${decision.label}</span>
-          <span class="patch-reason">${decision.reason}</span>
-          <button class="btn btn-sm patch-expedite-btn${decision.isExpedited ? ' active' : ''}"
-                  onclick="PatchRules.setExpedite('${app.id}', ${!decision.isExpedited}); App.render();">
-            ${expediteLabel}
-          </button>
-        </div>`;
-    }
+    const dateTs = entry.versionSetAt || entry.addedAt;
+    const dateLabel = entry.versionSetAt ? 'Updated' : 'Added';
+    const dateHtml = dateTs
+      ? `<div class="app-card-date">${dateLabel} ${timeAgo(dateTs)}</div>`
+      : '';
+
+    const newVersion = anyNew
+      ? (macNew && release?.mac?.version) ? release.mac.version
+        : (winNew && release?.win?.version) ? release.win.version : null
+      : null;
+    const markUpToDateHtml = newVersion
+      ? `<button class="btn green mark-up-to-date-btn" onclick="UI.markUpToDate('${app.id}', '${newVersion}')">Mark Up to Date</button>`
+      : '';
 
     // Manual check prompt — shown when at least one configured platform returned no version
     const macUnavailable = app.brew && release && (release.mac?.error || !release.mac?.version);
@@ -187,7 +176,7 @@ const UI = (() => {
             <span class="manual-check-label">Version unavailable. Check release page monthly</span>
             <span class="manual-check-status">${statusText}</span>
           </div>
-          <button class="btn btn-sm" onclick="UI.markManualCheck('${app.id}')">Mark Checked</button>
+          <button class="btn btn-sm green" onclick="UI.markManualCheck('${app.id}')">Mark Checked</button>
         </div>`;
     }
 
@@ -206,7 +195,7 @@ const UI = (() => {
           <button class="btn app-remove-btn" title="Remove from dashboard" onclick="App.removeApp('${app.id}')">×</button>
         </div>
         <div class="app-platforms">
-          ${macRow}${winRow}
+          ${platformRow}
         </div>
         <div class="app-card-footer">
           <div class="version-col">
@@ -215,8 +204,9 @@ const UI = (() => {
           </div>
           <button class="btn btn-sm" onclick="UI.openVersionModal('${app.id}', true)">Edit version</button>
         </div>
-        ${patchHtml}
+        ${dateHtml}
         ${manualCheckHtml}
+        ${markUpToDateHtml}
       </div>`;
   }
 
@@ -651,6 +641,15 @@ const UI = (() => {
     App.render();
   }
 
+  function markUpToDate(id, version) {
+    Store.setCurrentVersion(id, version);
+    const release = Store.getRelease(id);
+    if (release?.win?.version && release.win.version !== version) {
+      Store.setCurrentVersionWin(id, release.win.version);
+    }
+    App.render();
+  }
+
   // ── Status bar helpers ───────────────────────────────────────────────────────
   function setScanStatus(html) { document.getElementById('scanStatusText').innerHTML = html; }
   function setProgress(pct) {
@@ -666,6 +665,76 @@ const UI = (() => {
     if (msg) b.innerHTML = msg;
   }
 
+  // ── Import ────────────────────────────────────────────────────────────────────
+  function handleImportFile(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      let data;
+      try { data = JSON.parse(e.target.result); } catch {
+        showBanner('<strong>Import failed:</strong> invalid JSON file.');
+        return;
+      }
+      const entries = Array.isArray(data) ? data : [data];
+      _importApps(entries);
+    };
+    reader.readAsText(file);
+  }
+
+  function _importApps(entries) {
+    let tracked = 0, created = 0, skipped = 0;
+    const errors = [];
+
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') { errors.push('non-object entry skipped'); continue; }
+      if (!entry.name) { errors.push('entry missing "name"'); continue; }
+
+      const allApps = [...CATALOG, ...Store.getCustomApps()];
+      let existing = entry.id ? allApps.find(a => a.id === entry.id) : null;
+      if (!existing) existing = allApps.find(a => a.name.toLowerCase() === entry.name.toLowerCase());
+
+      if (existing) {
+        if (Store.isTracked(existing.id)) { skipped++; continue; }
+        Store.addApp(existing.id, entry.currentVersion || null);
+        tracked++;
+      } else {
+        if (!entry.category) { errors.push(`"${entry.name}" missing "category"`); continue; }
+        const platforms = Array.isArray(entry.platforms)
+          ? entry.platforms.filter(p => p === 'mac' || p === 'win')
+          : ['mac', 'win'];
+        if (!platforms.length) { errors.push(`"${entry.name}" has no valid platforms`); continue; }
+
+        const baseId = entry.id || ('custom-' + entry.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, ''));
+        const allIds = new Set([...CATALOG, ...Store.getCustomApps()].map(a => a.id));
+        const id = allIds.has(baseId) ? baseId + '-' + Date.now() : baseId;
+
+        Store.addCustomApp({
+          id, name: entry.name, category: entry.category,
+          desc: entry.desc || entry.name, platforms,
+          brew: entry.brew || null, winget: entry.winget || null,
+          github: entry.github || null, homepage: entry.homepage || null,
+          isCustom: true,
+        });
+        Store.addApp(id, entry.currentVersion || null);
+        created++;
+      }
+    }
+
+    renderCategoryFilters();
+    renderCatalog();
+    App.render();
+
+    const parts = [];
+    if (tracked > 0) parts.push(`${tracked} catalog app${tracked !== 1 ? 's' : ''} added to dashboard`);
+    if (created > 0) parts.push(`${created} custom app${created !== 1 ? 's' : ''} created`);
+    if (skipped > 0) parts.push(`${skipped} already tracked`);
+    if (errors.length > 0) parts.push(`<strong>${errors.length} skipped:</strong> ${errors.join('; ')}`);
+    showBanner(parts.join(' &middot; ') || 'Nothing imported.');
+  }
+
   return {
     renderStats, renderDashboard,
     openCatalog, closeCatalog, closeCatalogOnBg, renderCatalog,
@@ -676,6 +745,7 @@ const UI = (() => {
     openAddCustomModal, closeAddCustomModal, closeAddCustomModalOnBg,
     toggleCustomCategory, addCustomKeydown, confirmAddCustom, deleteCustomApp,
     setScanStatus, setProgress, setSpinner, setRefreshBtn, showBanner,
-    markManualCheck,
+    markManualCheck, markUpToDate,
+    handleImportFile,
   };
 })();

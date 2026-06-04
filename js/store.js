@@ -43,7 +43,12 @@ const Store = (() => {
 
   function setCurrentVersion(id, version) {
     const e = myApps.find(a => a.id === id);
-    if (e) { e.currentVersion = version || null; e.versionSetAt = version ? Date.now() : null; saveMyApps(); }
+    if (e) { e.currentVersion = version || null; e.currentVersionWin = null; e.versionSetAt = version ? Date.now() : null; saveMyApps(); }
+  }
+
+  function setCurrentVersionWin(id, version) {
+    const e = myApps.find(a => a.id === id);
+    if (e) { e.currentVersionWin = version || null; saveMyApps(); }
   }
 
   function setChannel(id, channel) {
@@ -128,7 +133,8 @@ const Store = (() => {
   function isNewRelease(entry, rel, platform) {
     if (!rel || !entry.currentVersion) return false;
     const latest = rel[platform]?.version;
-    return !!(latest && latest !== entry.currentVersion);
+    const cv = (platform === 'win' && entry.currentVersionWin) ? entry.currentVersionWin : entry.currentVersion;
+    return !!(latest && latest !== cv);
   }
 
   function getDashboardStats() {
@@ -158,7 +164,7 @@ const Store = (() => {
 
   return {
     load,
-    addApp, removeApp, isTracked, getMyApps, setCurrentVersion, setChannel,
+    addApp, removeApp, isTracked, getMyApps, setCurrentVersion, setCurrentVersionWin, setChannel,
     setRelease, getRelease, getDashboardStats, isNewRelease,
     addCustomApp, removeCustomApp, getCustomApps,
     setManualCheck, getManualCheck,

@@ -1,6 +1,13 @@
 // PatchBoards · patchRules.js
 // Single source of truth for per-app patch scheduling policy.
 //
+// AGE_THRESHOLDS — how many days a pending update may sit before the environment
+// scan flags it as overdue. Security updates have a tighter deadline.
+const AGE_THRESHOLDS = {
+  security: 7,   // days — must apply security patches within a week
+  standard: 90,  // days — regular updates flagged after 3 months
+};
+//
 // PATCH_RULES — static config. Edit schedules here.
 // PatchRules  — runtime module. Handles expedite overrides (localStorage)
 //               and the decision function.
@@ -75,5 +82,7 @@ const PatchRules = (() => {
     return { action: 'defer', label: 'Defer', reason: 'No rule matched — defaulting to defer', isExpedited: false };
   }
 
-  return { load, setExpedite, decide };
+  function getAgeThresholds() { return AGE_THRESHOLDS; }
+
+  return { load, setExpedite, decide, getAgeThresholds };
 })();
