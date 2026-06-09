@@ -142,6 +142,32 @@ One object per input app, in the same order. Set releaseUrl to null if genuinely
 
 const AgentUI = (() => {
 
+  // Keyed by app ID; populated during renderResults, consumed by applyToStore
+  let _pendingApplies = {};
+
+  function applyToStore(id) {
+    const pending = _pendingApplies[id];
+    if (!pending) return;
+
+    const app = getCatalogApp(id);
+    if (!app) return;
+
+    const existing = Store.getRelease(id) || {};
+    const vData = { version: pending.latestVersion, sourceUrl: pending.releaseUrl };
+
+    Store.setRelease(id, {
+      mac: app.brew                   ? { ...(existing.mac || {}), ...vData } : (existing.mac || null),
+      win: (app.winget || app.github) ? { ...(existing.win || {}), ...vData } : (existing.win || null),
+    });
+
+    App.render();
+
+    const btn = document.getElementById(`agent-apply-btn-${id}`);
+    if (btn) { btn.textContent = 'Updated ✓'; btn.disabled = true; }
+
+    delete _pendingApplies[id];
+  }
+
   function openPanel() {
     document.getElementById('agentOverlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -206,6 +232,8 @@ const AgentUI = (() => {
   }
 
   function renderResults({ enriched, empty, noApiKey, aiError }) {
+    _pendingApplies = {};
+
     if (empty) {
       set(`
         <div class="agent-all-good">
@@ -224,7 +252,13 @@ const AgentUI = (() => {
       ? `<div class="agent-warn-banner">AI scan failed: ${aiError}</div>`
       : '';
 
-    const secCount = enriched.filter(r => r.ai?.isSecurity).length;
+    const secCount = enriched.filter(r => {
+      if (!r.ai?.isSecurity) return false;
+      const cv = r.entry.currentVersion;
+      const fetchedLatest = r.release?.mac?.version || r.release?.win?.version || null;
+      const latest = fetchedLatest || r.ai?.latestVersion || null;
+      return !(cv && latest && latest === cv);
+    }).length;
 
     // Sort: security first, then apps with AI results, then the rest
     const sorted = [...enriched].sort((a, b) => {
@@ -270,6 +304,15 @@ const AgentUI = (() => {
       const url     = ai?.releaseUrl || '';
       const link    = url ? `<a href="${url}" target="_blank" rel="noopener" class="plat-link">release notes ↗</a>` : '';
 
+      // Show "Update Dashboard" when AI found a version the release cache doesn't have
+      const hasNewVersion = !!(ai?.latestVersion && ai.latestVersion !== fetchedLatest);
+      if (hasNewVersion) {
+        _pendingApplies[entry.id] = { latestVersion: ai.latestVersion, releaseUrl: ai.releaseUrl || null };
+      }
+      const applyBtn = hasNewVersion
+        ? `<button class="btn btn-sm" id="agent-apply-btn-${entry.id}" onclick="AgentUI.applyToStore('${entry.id}')">Update Dashboard</button>`
+        : '';
+
       const isUpToDate = !!(cv && latest && latest === cv);
       const rowClass   = isUpToDate ? 'is-ok' : isSec ? 'is-sec' : '';
 
@@ -282,7 +325,7 @@ const AgentUI = (() => {
             </div>
             ${versionsHtml}
             ${summary ? `<p class="agent-pkg-summary">${summary}</p>` : ''}
-            ${link    ? `<div class="agent-pkg-meta">${link}</div>` : ''}
+            ${(link || applyBtn) ? `<div class="agent-pkg-meta">${link}${applyBtn}</div>` : ''}
           </div>
         </div>`;
     }).join('');
@@ -308,5 +351,5 @@ const AgentUI = (() => {
     );
   }
 
-  return { openPanel, closePanel, closePanelOnBg, renderIdle, startScan };
+  return { openPanel, closePanel, closePanelOnBg, renderIdle, startScan, applyToStore };
 })();

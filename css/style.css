@@ -691,7 +691,7 @@ body { min-height: 100vh; }
 .agent-pkg-name     { font-size:13px; font-weight:600; letter-spacing:-0.1px; }
 .agent-pkg-versions { display:flex; align-items:center; gap:4px; }
 .agent-pkg-summary  { font-size:12px; color:var(--text-2); line-height:1.5; margin:0; }
-.agent-pkg-meta     { font-size:12px; }
+.agent-pkg-meta     { font-size:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .agent-ai-tag       { font-size:10px; padding:2px 6px; border-radius:4px; background:var(--accent-soft); color:var(--accent); font-weight:700; letter-spacing:0.3px; border:1px solid rgba(75,166,245,0.25); }
 .agent-idle-count   { font-size:13px; color:var(--text-2); background:var(--bg-secondary); padding:8px 16px; border-radius:var(--radius-md); border:1px solid var(--border); }
 

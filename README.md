@@ -103,6 +103,60 @@ Patchboards/
 
 ---
 
+## Importing apps
+
+Instead of adding apps one at a time, you can bulk-import them from a JSON file using the **Import** button.
+
+1. Click **Browse Software** in the top bar to open the catalog panel
+2. Click the **Import** button in the panel header
+3. Pick a `.json` file from your computer
+
+PatchBoards reads the file and, for each entry:
+
+- If the app already exists in the catalog (matched by `id`, or by `name` if no `id`), it's added to your dashboard. Apps you already track are skipped.
+- If the app isn't in the catalog, a **custom app** is created and added to your dashboard.
+
+A banner summarizes the result (added, created, skipped, and any errors).
+
+### File format
+
+The file is either a single app object or an array of them. Only `name` is required for every entry; `category` is also required when creating a *new* (custom) app.
+
+```json
+[
+  {
+    "name": "Visual Studio Code",
+    "currentVersion": "1.89.0"
+  },
+  {
+    "name": "My Enterprise Tool",
+    "category": "Internal",
+    "desc": "In-house deployment utility",
+    "platforms": ["mac", "win"],
+    "brew": "my-tool",
+    "winget": "Acme.MyTool",
+    "github": "acme/my-tool",
+    "homepage": "https://example.com",
+    "currentVersion": "2.3.1"
+  }
+]
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `name` | Yes | Used to match an existing catalog app (case-insensitive) when no `id` is given |
+| `id` | No | Matches an existing catalog/custom app exactly; otherwise used as the new app's ID |
+| `currentVersion` | No | The version your org has deployed. Leave out to track without version comparison |
+| `category` | For new apps | Required only when creating a custom app that isn't already in the catalog |
+| `platforms` | No | Array of `"mac"` and/or `"win"`. Defaults to both |
+| `desc` | No | Short description (defaults to the name) |
+| `brew` / `winget` / `github` | No | Package IDs used to fetch the latest release |
+| `homepage` | No | Link shown on the app card |
+
+> Invalid JSON, entries without a `name`, or new apps without a `category` are skipped and reported in the result banner.
+
+---
+
 ## API key safety
 
 `js/config.js` is in `.gitignore` — your keys will never be committed. Only `js/config.example.js` (with placeholders) is tracked by git.

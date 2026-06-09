@@ -20,11 +20,11 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <button id="refreshBtn" class="btn" onclick="App.fetchReleases()">Refresh</button>
-        <button class="btn" onclick="AgentUI.openPanel()">Agent Scan</button>
-        <button class="btn" onclick="EnvScanUI.open()">Env Scan</button>
-        <button class="btn" onclick="UI.openVerifyPanel()">Verify Releases</button>
-        <button class="btn primary" onclick="UI.openCatalog()">Browse Software</button>
+        <button id="refreshBtn" class="btn" onclick="App.fetchReleases()" title="Fetch the latest release versions for all tracked software">Refresh</button>
+        <button class="btn" onclick="AgentUI.openPanel()" title="Run an AI-powered scan to detect outdated or at-risk software in your environment">Agent Scan</button>
+        <button class="btn" onclick="EnvScanUI.open()" title="Scan your local environment to discover installed software and compare against latest releases">Env Scan</button>
+        <button class="btn" onclick="UI.openVerifyPanel()" title="Verify that tracked release versions are authentic and match official sources">Verify Releases</button>
+        <button class="btn primary" onclick="UI.openCatalog()" title="Browse the curated catalog of enterprise software to add apps for tracking">Browse Software</button>
       </div>
     </header>
 
